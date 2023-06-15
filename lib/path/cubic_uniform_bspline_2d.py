@@ -100,7 +100,7 @@ def solver_cubic_uniform_bspline_2d_v2(way_pts, vel0=[], vel1=[]):
         ax.plot(show_x, show_y, 'g-', linewidth='1')
         plt.axis('equal')
         plt.show()
-    return D
+    return D.T
 
 def delta(knots, i):
     return knots[i+1]-knots[i]
@@ -146,26 +146,27 @@ def knots_quasi_uniform(ctrl_pts_num, degree=3):
     knots_all = np.append(np.append(np.zeros([degree]), knots_inner), np.ones([degree]))
     return knots_all
 
-#
-# wpt_list = [
-#     [0., 0.0188, 0.0749, 0.1673, 0.2944, 0.4539, 0.6092, 0.7832, 0.9746, 1.1818, 1.4030, 1.6045, 1.8144, 2.0318, 2.2559,
-#      2.4859] \
-#     ,
-#     [0., 0.1991, 0.3929, 0.5761, 0.7438, 0.8910, 1.0338, 1.1603, 1.2688, 1.3576, 1.4252, 1.5051, 1.5709, 1.6222, 1.6585,
-#      1.6793]]
-#
-# delta_s = 1 # np.linalg.norm( np.array(wpt_list)[:,1] - np.array(wpt_list)[:,0])
-#
-# angle0 = 90
-# rad0 = np.deg2rad(angle0)
-# angle1 = 34.04
-# rad1 = np.deg2rad(angle1)
-# vel0 = np.array([[np.cos(rad0)],[np.sin(rad0)]]) * delta_s
-# vel1 = np.array([[np.cos(rad1)],[np.sin(rad1)]]) * delta_s
-#
-# # solver_cubic_uniform_bspline_2d(np.array(wpt_list))
-# solver_cubic_uniform_bspline_2d_v2(np.array(wpt_list), vel0, vel1)
-# # test_tau = np.linspace(0,1,6)
-# # knots = knots_quasi_uniform(4)
-# # basis = spcol(test_tau, knots, 3)
-# # print(basis)
+# test
+if __name__ == "__main__":
+    wpt_list = [
+        [0., 0.0188, 0.0749, 0.1673, 0.2944, 0.4539, 0.6092, 0.7832, 0.9746, 1.1818, 1.4030, 1.6045, 1.8144, 2.0318, 2.2559,
+         2.4859] \
+        ,
+        [0., 0.1991, 0.3929, 0.5761, 0.7438, 0.8910, 1.0338, 1.1603, 1.2688, 1.3576, 1.4252, 1.5051, 1.5709, 1.6222, 1.6585,
+         1.6793]]
+
+    delta_s = 1 # np.linalg.norm( np.array(wpt_list)[:,1] - np.array(wpt_list)[:,0])
+
+    angle0 = 90
+    rad0 = np.deg2rad(angle0)
+    angle1 = 34.04
+    rad1 = np.deg2rad(angle1)
+    vel0 = np.array([[np.cos(rad0)],[np.sin(rad0)]]) * delta_s
+    vel1 = np.array([[np.cos(rad1)],[np.sin(rad1)]]) * delta_s
+
+    # solver_cubic_uniform_bspline_2d(np.array(wpt_list))
+    solver_cubic_uniform_bspline_2d_v2(np.array(wpt_list), vel0, vel1)
+    # test_tau = np.linspace(0,1,6)
+    # knots = knots_quasi_uniform(4)
+    # basis = spcol(test_tau, knots, 3)
+    # print(basis)

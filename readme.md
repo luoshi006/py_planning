@@ -14,7 +14,11 @@ A python motion planning demo
   - [x] 给定 wpt 的位置、端点方向
   - ![](fig/path_generator_bspline_default.png)
 - [ ] BSpline 管理
-  - [ ] MINVO 避障检测
+  - [x] MINVO 避障检测
+    - MINVO 凸包对比
+      - ![](fig/bspline_path_convex_hull.png)
+    - 避障检测
+      - ![](fig/path_generator_bspline_obs.png)
   - [ ] 弧长参数化
 - [ ] Keeprun 动态更新
 
