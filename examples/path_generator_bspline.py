@@ -84,4 +84,5 @@ print("====")
 print("%d path generated." % (idx_path))
 
 if flg_draw:
+    # plt.savefig('path_generator_bspline_default.png', dpi=600)
     plt.show()

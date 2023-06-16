@@ -182,7 +182,9 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from matplotlib.patches import Polygon
     import sys
-    sys.path.append('..')
+    import os
+    #sys.path.append('..')
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from collision_detect.poly_poly_intersection import poly_poly_intersection
 
     wpt_list = [
@@ -221,5 +223,6 @@ if __name__ == "__main__":
 
     plt.axis('equal')
     plt.legend()
+    # plt.savefig('bspline_path_convex_hull.png', dpi=600)
     plt.show()
 
