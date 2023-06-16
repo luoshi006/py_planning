@@ -4,9 +4,9 @@ from matplotlib.patches import Polygon
 
 import sys
 sys.path.append('..')
-from lib.path.cubic_uniform_bspline_2d import solver_cubic_uniform_bspline_2d_v2, spcol, knots_quasi_uniform
+from lib.path.cubic_uniform_bspline_2d import solver_cubic_uniform_bspline_2d_v2
 from lib.path.bspline_path import BSplinePath2D
-from lib.point_in_poly import point_in_polygon
+from lib.collision_detect.point_in_poly import point_in_polygon
 
 # generate path
 dis = 1.0

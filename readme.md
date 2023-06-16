@@ -19,6 +19,7 @@ A python motion planning demo
       - ![](fig/bspline_path_convex_hull.png)
     - 避障检测
       - ![](fig/path_generator_bspline_obs.png)
-  - [ ] 弧长参数化
+  - [x] 弧长参数化
+    - ![](fig/bspline_path_arclen_parametrization.png)
 - [ ] Keeprun 动态更新
 

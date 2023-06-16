@@ -3,8 +3,8 @@ from scipy import interpolate
 from scipy import integrate
 from scipy import spatial
 
-from ..point_in_poly import point_in_polygon
-from ..poly_poly_intersection import poly_poly_intersection
+if __package__:
+    from lib.collision_detect.poly_poly_intersection import poly_poly_intersection
 
 class BSplinePath2D:
     # default 2D cubic clamped uniform b-spline
@@ -23,7 +23,7 @@ class BSplinePath2D:
             self.spl = interpolate.BSpline(self.knots, ctrl_pts.T, degree)
             self.spl_der1 = self.spl.derivative()
             self.spl_der2 = self.spl.derivative(2)
-            self.arclength()
+            self.arclen = self.arclength()
 
     def eval_list(self, step_size=0.02):
         #TODO: arc parameter the spline
@@ -33,34 +33,64 @@ class BSplinePath2D:
         xy = self.spl(np.linspace(0,1,sample_num))
         return xy.T
 
+    def eval_arclen(self, step_arclen=0.02, t0=0, t1=1):
+        """interpolate the (u, s(u)), and calc u(s_eq)
+            :return spline(u)
+        """
+        sample_factor = 2
+        approx_len = self.arclen * (t1-t0)
+        sample_num = int(max(10, approx_len // step_arclen))
+        u_ref = np.linspace(t0, t1, sample_num*sample_factor)
+        s_ref = self.arclength(u_ref)
+        s_lin = np.linspace(s_ref[0], s_ref[-1], sample_num)
+        s_interp = np.interp(s_lin, s_ref,u_ref)
+        xy = self.spl(s_interp)
+        return xy.T
+
     def eval(self, u):
-        if u<0 or u>1:
-            print("u should be in [0,1]")
+        u = np.atleast_1d(u)  # force to array
         return self.spl(u)
 
+    def eval_angle(self, u, deg=False):
+        u = np.atleast_1d(u)  # force to array
+        dx,dy = self.eval_der(u)
+        angle_rad = np.arctan2(dy,dx)
+        if deg:
+            return np.rad2deg(angle_rad)
+        else:
+            return angle_rad
+
     def eval_der(self, u, order=1):
-        if u<0 or u>1:
-            print("u should be in [0,1]")
+        u = np.atleast_1d(u)  # force to array
         if 1 == order:
-            return self.spl_der1(u)
+            dxy = self.spl_der1(u)
+            dx = dxy[:, 0]
+            dy = dxy[:, 1]
+            return dx,dy
         elif 2 == order:
-            return self.spl_der2(u)
+            ddxy = self.spl_der2(u)
+            ddx = ddxy[:, 0]
+            ddy = ddxy[:, 1]
+            return ddx,ddy
         else:
             print("order now only support 0, 1; but now is {}".format(order))
 
-    def arclength(self, t0=0, t1=1):
-        if 0 == t0 and 1 == t1 and self.arclen > 0:
-            return self.arclen
+    def arclength(self, t1=1, t0=0):
+        # if 0 == t0 and 1 == t1 and self.arclen > 0:
+        #     return self.arclen
         def derivate_s(u):
-            u = np.atleast_1d(u)   # bug! the u sometimes is [0.5]
-            dxy = self.spl_der1(u)
-            dx = dxy[:,0]
-            dy = dxy[:,1]
+            dx,dy = self.eval_der(u)
             return np.hypot(dx,dy)
-        res = integrate.romberg(derivate_s, t0,t1, tol=1e-6, vec_func=True)
-        if 0 == t0 and 1 == t1:
-            self.arclen = res
-        return res
+
+        t1 = np.atleast_1d(t1)
+        if t1.size > 1 and t0 == 0:
+            t0 = np.zeros_like(t1)
+        else:
+            t0 = np.atleast_1d(t0)
+        #TODO: check [t0,t1] size equal
+        # res = integrate.romberg(derivate_s, t0,t1, tol=1e-6, vec_func=True)
+        res = np.array([integrate.romberg(derivate_s, t0i, t1i, tol=1e-6, vec_func=True) for t0i,t1i in zip(t0,t1)])
+        return res.squeeze()
 
     def curvature(self, t):
         """Return the signed curvature at t for bspline"""
@@ -86,8 +116,8 @@ class BSplinePath2D:
             else:
                 hull = spatial.ConvexHull(V_bs_2x4.T)
                 hulls_idxs.append(hull.vertices)
-            pts_4x2s.append(V_bs_2x4)
-        return hulls_idxs
+            pts_4x2s.append(V_bs_2x4.T)
+        return hulls_idxs, pts_4x2s
 
     def MINVO_hull(self):
         assert self.p == 3, "only support cubic uniform spline."
@@ -151,35 +181,43 @@ class BSplinePath2D:
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from matplotlib.patches import Polygon
+    import sys
+    sys.path.append('..')
+    from collision_detect.poly_poly_intersection import poly_poly_intersection
+
     wpt_list = [
         [0., 0.0188, 0.0749, 0.1673, 0.2944, 0.4539, 0.6092, 0.7832, 0.9746, 1.1818, 1.4030, 1.6045, 1.8144, 2.0318, 2.2559, 2.4859] \
        ,[0., 0.1991, 0.3929, 0.5761, 0.7438, 0.8910, 1.0338, 1.1603, 1.2688, 1.3576, 1.4252, 1.5051, 1.5709, 1.6222, 1.6585, 1.6793]]
 
     spl1 = BSplinePath2D(np.array(wpt_list))
-    show_pts = spl1.eval_list()
-    hulls = spl1.convex_hull()
+    show_pts0 = spl1.eval_list(0.1)
+    show_pts1 = spl1.eval_arclen(0.1)
+    hulls, ptss = spl1.convex_hull()
     hulls_minvo, pts_minvo = spl1.MINVO_hull()
 
-    fig, ax = plt.subplots()
+    fig,ax1 = plt.subplots()
+    # fig, (ax0, ax1) = plt.subplots(nrows=2, subplot_kw=dict(aspect='equal'))
     # spline
-    ax.plot(show_pts[0,:], show_pts[1,:],'k', linewidth='0.3', label='path')
+    # ax0.plot(show_pts0[0,:], show_pts0[1,:], 'k.-', linewidth='0.3', label='path')
+    ax1.plot(show_pts1[0,:], show_pts1[1,:], 'k.-', linewidth='0.3', label='path')
     # hulls
     for i in range(spl1.n-2):
         # convex hull
-        pts = spl1.ctrl_pts[:,i:i+4].T
-        idx_closed = np.append(hulls[i].vertices, hulls[i].vertices[0])
+        pts = ptss[i]
+        idx_closed = np.append(hulls[i], hulls[i][0])
         poly = Polygon(pts[idx_closed, :], alpha=0.2, fc='r')
         if 0 == i:
             poly.set_label('convex hull')
-        ax.add_patch(poly)
+        ax1.add_patch(poly)
+        # ax0.add_patch(poly)
         # minvo
         pts_m = pts_minvo[i]
-        idx_m_closed = np.append(hulls_minvo[i].vertices, hulls_minvo[i].vertices[0])
+        idx_m_closed = np.append(hulls_minvo[i], hulls_minvo[i][0])
         poly_m = Polygon(pts_m[idx_m_closed,:], alpha=0.4, fc='g')
         if 0 == i:
             poly_m.set_label('MINVO hull')
-        ax.add_patch(poly_m)
-
+        ax1.add_patch(poly_m)
+        # ax1.add_patch(poly_m)
 
     plt.axis('equal')
     plt.legend()
