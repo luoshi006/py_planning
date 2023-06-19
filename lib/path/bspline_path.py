@@ -8,30 +8,29 @@ if __package__:
 
 class BSplinePath2D:
     # default 2D cubic clamped uniform b-spline
-    def __init__(self, ctrl_pts=[], dim=2, degree=3):
+    def __init__(self, ctrl_pts_2xn=[], dim=2, degree=3):
         self.dim = dim
         self.p = degree
         self.order = degree+1
         self.arclen = 0
-        if len(ctrl_pts) > 0:
-            assert ctrl_pts.shape[0] == 2
-            self.ctrl_pts = ctrl_pts    # 2xn
-            self.n = ctrl_pts.shape[1]-1
+        if len(ctrl_pts_2xn) > 0:
+            assert ctrl_pts_2xn.shape[0] == 2
+            self.ctrl_pts_2xn = ctrl_pts_2xn    # 2xn
+            self.n = ctrl_pts_2xn.shape[1] - 1
             self.m = self.n + self.p + 1
             knots_inner = np.linspace(0, 1, self.n-1, endpoint=True)
             self.knots = np.append(np.append(np.zeros([self.p]), knots_inner), np.ones([self.p]))
-            self.spl = interpolate.BSpline(self.knots, ctrl_pts.T, degree)
+            self.spl = interpolate.BSpline(self.knots, ctrl_pts_2xn.T, degree)
             self.spl_der1 = self.spl.derivative()
             self.spl_der2 = self.spl.derivative(2)
             self.arclen = self.arclength()
 
     def eval_list(self, step_size=0.02):
-        #TODO: arc parameter the spline
         assert 0 < self.arclen, "the spline param is null!"
         sample_num = int(max(10, self.arclength() // step_size))    # at least 10 pts
         # xi, yi = interpolate.splev(np.linspace(0,1,sample_num), self.tck)
-        xy = self.spl(np.linspace(0,1,sample_num))
-        return xy.T
+        xy_nx2 = self.spl(np.linspace(0,1,sample_num))
+        return xy_nx2.T
 
     def eval_arclen(self, step_arclen=0.02, t0=0, t1=1):
         """interpolate the (u, s(u)), and calc u(s_eq)
@@ -44,8 +43,8 @@ class BSplinePath2D:
         s_ref = self.arclength(u_ref)
         s_lin = np.linspace(s_ref[0], s_ref[-1], sample_num)
         s_interp = np.interp(s_lin, s_ref,u_ref)
-        xy = self.spl(s_interp)
-        return xy.T
+        xy_nx2 = self.spl(s_interp)
+        return xy_nx2.T
 
     def eval(self, u):
         u = np.atleast_1d(u)  # force to array
@@ -94,13 +93,8 @@ class BSplinePath2D:
 
     def curvature(self, t):
         """Return the signed curvature at t for bspline"""
-        t = np.atleast_1d(t)    # force to array
-        dxy = self.spl_der1(t)
-        ddxy = self.spl_der2(t)
-        dx = dxy[:,0]
-        dy = dxy[:,1]
-        ddx = ddxy[:,0]
-        ddy = ddxy[:,1]
+        dx, dy = self.eval_der(t)
+        ddx, ddy = self.eval_der(t, 2)
         return (dx*ddy - dy*ddx) / np.power(dx*dx + dy*dy, 1.5)
 
     def convex_hull(self):
@@ -108,8 +102,8 @@ class BSplinePath2D:
         hulls_idxs = []
         pts_4x2s = []
         for i in range(self.n-2):
+            V_bs_2x4 = self.ctrl_pts_2xn[:, i:i + 4]
             # check collinear
-            V_bs_2x4 = self.ctrl_pts[:,i:i+4]
             if np.linalg.matrix_rank(V_bs_2x4, tol=0.001) == 1:
                 coll_idx = np.array([0,3])
                 hulls_idxs.append(coll_idx)
@@ -152,7 +146,7 @@ class BSplinePath2D:
                                     0.70176522577378919187651717948029,   0.66657381254229419731416328431806,   0.29187180223752384744528853843804,    0.11985166952332582113172065874096,
                                     0.11985166952332682033244282138185,   0.29187180223752445806795208227413,   0.66657381254229419731416328431806,    0.70176522577378930289881964199594,
                                     -0.0053387944495217444854096022766043, -0.015455155707597083292181849856206,  0.057009540927778303009976212933907,    0.18372189915240558222286892942066]).reshape((4,4))
-            V_bs_2x4 = self.ctrl_pts[:,i:i+4]
+            V_bs_2x4 = self.ctrl_pts_2xn[:, i:i + 4]
             V_mv_2x4 = V_bs_2x4 @ M_seg_4x4
 
             # check collinear
@@ -187,12 +181,15 @@ if __name__ == "__main__":
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from collision_detect.poly_poly_intersection import poly_poly_intersection
 
-    wpt_list = [
-        [0., 0.0188, 0.0749, 0.1673, 0.2944, 0.4539, 0.6092, 0.7832, 0.9746, 1.1818, 1.4030, 1.6045, 1.8144, 2.0318, 2.2559, 2.4859] \
-       ,[0., 0.1991, 0.3929, 0.5761, 0.7438, 0.8910, 1.0338, 1.1603, 1.2688, 1.3576, 1.4252, 1.5051, 1.5709, 1.6222, 1.6585, 1.6793]]
+    wpt_list = np.array([
+        [0., 0.11672268, 0.4539905 , 0.87690559, 1.40306285, 1.92224408, 2.4859] \
+       ,[0., 0.48618496, 0.89100652, 1.21697847, 1.42527704, 1.59842976, 1.6793]])
 
-    spl1 = BSplinePath2D(np.array(wpt_list))
-    show_pts0 = spl1.eval_list(0.1)
+    ctrl_pts = np.array([[0.    , 0.    , 0.071 , 0.4517, 0.8462, 1.425 , 1.872 , 2.3709,2.4859],
+                         [0.    , 0.1389, 0.5183, 0.8948, 1.2484, 1.4133, 1.65  , 1.6016, 1.6793]])
+
+    spl1 = BSplinePath2D(ctrl_pts)
+    # show_pts1 = spl1.eval_list(0.1)
     show_pts1 = spl1.eval_arclen(0.1)
     hulls, ptss = spl1.convex_hull()
     hulls_minvo, pts_minvo = spl1.MINVO_hull()
@@ -201,25 +198,37 @@ if __name__ == "__main__":
     # fig, (ax0, ax1) = plt.subplots(nrows=2, subplot_kw=dict(aspect='equal'))
     # spline
     # ax0.plot(show_pts0[0,:], show_pts0[1,:], 'k.-', linewidth='0.3', label='path')
-    ax1.plot(show_pts1[0,:], show_pts1[1,:], 'k.-', linewidth='0.3', label='path')
+    ax1.plot(show_pts1[0,:], show_pts1[1,:], 'k-', linewidth='0.3', label='path')
+    ax1.plot(wpt_list[0,:], wpt_list[1,:], 'r.', markersize=12, label='way pts')
+    ax1.plot(show_pts1[0,:], show_pts1[1,:], 'k.', label='path pts')
+    ax1.plot(spl1.ctrl_pts_2xn[0,:], spl1.ctrl_pts_2xn[1,:], 'c.', label='ctrl pts')
+
+    # tail
+    u_nm3 = spl1.knots[spl1.n-3]
+    smp_u = np.linspace(u_nm3,1,100)
+    smp_pts = spl1.spl(smp_u)
+    ax1.plot(smp_pts[:,0], smp_pts[:,1], 'r', linewidth='0.8', label='tail')
+
     # hulls
-    for i in range(spl1.n-2):
-        # convex hull
-        pts = ptss[i]
-        idx_closed = np.append(hulls[i], hulls[i][0])
-        poly = Polygon(pts[idx_closed, :], alpha=0.2, fc='r')
-        if 0 == i:
-            poly.set_label('convex hull')
-        ax1.add_patch(poly)
-        # ax0.add_patch(poly)
-        # minvo
-        pts_m = pts_minvo[i]
-        idx_m_closed = np.append(hulls_minvo[i], hulls_minvo[i][0])
-        poly_m = Polygon(pts_m[idx_m_closed,:], alpha=0.4, fc='g')
-        if 0 == i:
-            poly_m.set_label('MINVO hull')
-        ax1.add_patch(poly_m)
-        # ax1.add_patch(poly_m)
+    draw_hull = False
+    if draw_hull:
+        for i in range(spl1.n-2):
+            # convex hull
+            pts = ptss[i]
+            idx_closed = np.append(hulls[i], hulls[i][0])
+            poly = Polygon(pts[idx_closed, :], alpha=0.2, fc='r')
+            if 0 == i:
+                poly.set_label('convex hull')
+            ax1.add_patch(poly)
+            # ax0.add_patch(poly)
+            # minvo
+            pts_m = pts_minvo[i]
+            idx_m_closed = np.append(hulls_minvo[i], hulls_minvo[i][0])
+            poly_m = Polygon(pts_m[idx_m_closed,:], alpha=0.4, fc='g')
+            if 0 == i:
+                poly_m.set_label('MINVO hull')
+            ax1.add_patch(poly_m)
+            # ax1.add_patch(poly_m)
 
     plt.axis('equal')
     plt.legend()

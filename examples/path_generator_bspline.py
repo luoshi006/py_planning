@@ -3,7 +3,7 @@ import numpy as np
 
 import sys
 sys.path.append('..')
-from lib.path.cubic_uniform_bspline_2d import solver_cubic_uniform_bspline_2d_v2, spcol, knots_quasi_uniform
+from lib.path.cubic_uniform_bspline_2d import solver_cubic_uniform_bspline_2d_v2, solver_cubic_uniform_bspline_2d_v3
 from lib.path.bspline_path import BSplinePath2D
 
 # generate path
@@ -62,20 +62,28 @@ for shift0 in np.arange(angle_ori-fov_half, angle_ori+fov_half+1, angle):
                     path_waypoints_list.append(cur_pts)
                 path_waypoints_array = np.array(path_waypoints_list)
                 vel_s = sample_step*5
-                vel0 = np.array([[np.cos(np.deg2rad(shift0))], [np.sin(np.deg2rad(shift0))]]) * vel_s
+                vel0 = np.array([[np.cos(np.deg2rad(shift0))], [np.sin(np.deg2rad(shift0))]]) * vel_s*0.5
                 vel1 = np.array([[np.cos(np.deg2rad(shift3))], [np.sin(np.deg2rad(shift3))]]) * vel_s
 
                 # solve uniform BSpline ctrl pts from waypoints
-                ctrl_pts = solver_cubic_uniform_bspline_2d_v2(path_waypoints_array.T, vel0, vel1)
+                ctrl_pts = solver_cubic_uniform_bspline_2d_v3(path_waypoints_array.T, vel0, vel1)
                 # constructor for bspline
                 spl_cur = BSplinePath2D(ctrl_pts)
 
                 idx_path = idx_path + 1
 
+                # calc curvate
+                flg_prt_kpa = False
+                if flg_prt_kpa:
+                    kappa_u = np.linspace(0,0.5,100)
+                    kappa = spl_cur.curvature(kappa_u)
+                    print("first half traj kappa max: {}".format(np.round(np.max(np.abs(kappa)),2)))
+
                 # draw spline
                 if flg_draw:
                     show_pts = spl_cur.eval_list()
                     ax.plot(show_pts[0,:], show_pts[1,:], linewidth='0.5')
+                    ax.plot(path_waypoints_array[:,0], path_waypoints_array[:,1], 'r.', markersize='2')
                     plt.axis('equal')
                     plt.show(block=False)
                     plt.pause(0.001)
