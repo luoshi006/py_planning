@@ -5,6 +5,7 @@ from scipy import spatial
 
 if __package__:
     from lib.collision_detect.poly_poly_intersection import poly_poly_intersection
+    from lib.utils import get_transform
 
 class BSplinePath2D:
     # default 2D cubic clamped uniform b-spline
@@ -169,7 +170,52 @@ class BSplinePath2D:
                 return True
         return False
 
+    def distance_to(self, pts_1x2, err=0.01):
+        #TODO: should be improved according to
+            # https://stackoverflow.com/questions/2742610/closest-point-on-a-cubic-bezier-curve
+            # https://github.com/qnzhou/nanospline/blob/main/include/nanospline/BSplineBase.h#L29
+        xy_2xn = self.eval_arclen(err*2)
+        dists = xy_2xn.T - pts_1x2
+        norm = np.linalg.norm(dists, ord=2, axis=1, keepdims=True)
+        return np.min(norm)
 
+    def convex_hulls_of_curve(self, vehicle_contour_nx2_b):
+        hulls = []
+        hulls_idxs, hulls_vertex = self.MINVO_hull()
+        if [] == vehicle_contour_nx2_b:
+            for i in range(self.n - 2):
+                polyi = hulls_vertex[i][hulls_idxs[i],:]
+                hulls.append(polyi)
+        else:
+            for i in range(self.n -2):
+                # get polygon of ith segments
+                polyi = hulls_vertex[i][hulls_idxs[i], :]
+                # get segment of polygon, and convolution the segment endpoints and robot shape
+                pts_conv_nx2s = []
+                for j in range(polyi.shape[0]):
+                    end_idx = j+1
+                    if j+1 == polyi.shape[0]:
+                        end_idx = 0     # get the closed polygon
+                    end_pt = polyi[end_idx,:]
+                    start_pt = polyi[j,:]
+                    vec_diff_1x2 = end_pt - start_pt
+                    angle_j2jp1_rad = np.arctan2(vec_diff_1x2[1], vec_diff_1x2[0])
+                    # start point
+                    trans, rot = get_transform(start_pt[0], start_pt[1], angle_j2jp1_rad)
+                    pt_start_2xn = rot @ vehicle_contour_nx2_b.T + trans
+                    # pts_conv_nx2 = np.vstack((pts_conv_nx2, pt_start_2xn.T))
+                    pts_conv_nx2s.append(pt_start_2xn.T)
+                    # end point
+                    trans, rot = get_transform(end_pt[0], end_pt[1], angle_j2jp1_rad)
+                    pt_end_2xn = rot @ vehicle_contour_nx2_b.T + trans
+                    # pts_conv_nx2 = np.vstack((pts_conv_nx2, pt_end_2xn.T))
+                    pts_conv_nx2s.append(pt_end_2xn.T)
+                pts_conv_nx2 = np.array(pts_conv_nx2s)
+                rows = pts_conv_nx2.shape[0]*pts_conv_nx2.shape[1]
+                pts_conv_nx2 = pts_conv_nx2.reshape((rows,2))
+                hull = spatial.ConvexHull(pts_conv_nx2)
+                hulls.append(pts_conv_nx2[hull.vertices,:])
+        return hulls
 
 # ============ test =========================
 if __name__ == "__main__":
@@ -180,6 +226,7 @@ if __name__ == "__main__":
     #sys.path.append('..')
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from collision_detect.poly_poly_intersection import poly_poly_intersection
+    from utils import get_transform
 
     wpt_list = np.array([
         [0., 0.11672268, 0.4539905 , 0.87690559, 1.40306285, 1.92224408, 2.4859] \
@@ -189,28 +236,35 @@ if __name__ == "__main__":
                          [0.    , 0.1389, 0.5183, 0.8948, 1.2484, 1.4133, 1.65  , 1.6016, 1.6793]])
 
     spl1 = BSplinePath2D(ctrl_pts)
+
     # show_pts1 = spl1.eval_list(0.1)
-    show_pts1 = spl1.eval_arclen(0.1)
+    show_pts1 = spl1.eval_arclen(0.01)
     hulls, ptss = spl1.convex_hull()
     hulls_minvo, pts_minvo = spl1.MINVO_hull()
+    r = 0.1
+    vehicle_poly_nx2 = np.array([r, r
+                                , -r, r
+                                , -r, -r
+                                , r, -r]).reshape((4, 2))
+    collision_hulls = spl1.convex_hulls_of_curve(vehicle_poly_nx2)
 
     fig,ax1 = plt.subplots()
     # fig, (ax0, ax1) = plt.subplots(nrows=2, subplot_kw=dict(aspect='equal'))
     # spline
     # ax0.plot(show_pts0[0,:], show_pts0[1,:], 'k.-', linewidth='0.3', label='path')
     ax1.plot(show_pts1[0,:], show_pts1[1,:], 'k-', linewidth='0.3', label='path')
-    ax1.plot(wpt_list[0,:], wpt_list[1,:], 'r.', markersize=12, label='way pts')
-    ax1.plot(show_pts1[0,:], show_pts1[1,:], 'k.', label='path pts')
+    # ax1.plot(wpt_list[0,:], wpt_list[1,:], 'r.', markersize=12, label='way pts')
+    # ax1.plot(show_pts1[0,:], show_pts1[1,:], 'k.', label='path pts')
     ax1.plot(spl1.ctrl_pts_2xn[0,:], spl1.ctrl_pts_2xn[1,:], 'c.', label='ctrl pts')
 
-    # tail
-    u_nm3 = spl1.knots[spl1.n-3]
-    smp_u = np.linspace(u_nm3,1,100)
-    smp_pts = spl1.spl(smp_u)
-    ax1.plot(smp_pts[:,0], smp_pts[:,1], 'r', linewidth='0.8', label='tail')
+    # # tail
+    # u_nm3 = spl1.knots[spl1.n-3]
+    # smp_u = np.linspace(u_nm3,1,100)
+    # smp_pts = spl1.spl(smp_u)
+    # ax1.plot(smp_pts[:,0], smp_pts[:,1], 'r', linewidth='0.8', label='tail')
 
     # hulls
-    draw_hull = False
+    draw_hull = True
     if draw_hull:
         for i in range(spl1.n-2):
             # convex hull
@@ -229,9 +283,16 @@ if __name__ == "__main__":
                 poly_m.set_label('MINVO hull')
             ax1.add_patch(poly_m)
             # ax1.add_patch(poly_m)
+            # collision hull
+            col_poly_nx2 = collision_hulls[i]
+            col_poly_close_nx2 = np.vstack((col_poly_nx2, col_poly_nx2[0,:]))
+            poly_col = Polygon(col_poly_close_nx2, alpha=0.4, fc = 'b')
+            if 0 == i:
+                poly_col.set_label('collision hull')
+            ax1.add_patch(poly_col)
 
     plt.axis('equal')
     plt.legend()
-    # plt.savefig('bspline_path_convex_hull.png', dpi=600)
+    # plt.savefig('bspline_path_collision_hull.png', dpi=600)
     plt.show()
 

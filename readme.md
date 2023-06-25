@@ -19,6 +19,9 @@ A python motion planning demo
   - 参考 MIT-MINVO / Mader 中的 MINVO，代替默认凸包进行避障检测
     - https://github.com/mit-acl/minvo
     - https://github.com/mit-acl/mader
+  - 根据机器人形状膨胀凸包
+    - 避障凸包示例中，机器人形状为边长 0.2 的正方形
+    - 可以根据实际形状配置机器人轮廓点
 - **弧长参数化**
   - 拟合默认参数 `u` 与弧长 `s` 之间的关系，实现对弧长的近似等间距采样 `u(s_eq)`
   - 弧长的近似计算采用 romberg 积分
@@ -30,6 +33,9 @@ A python motion planning demo
 |:-------------------------------------:|:---------------------------------------:|:-----------------------------------------------:|
 | ![](fig/bspline_path_convex_hull.png) | ![](fig/path_generator_bspline_obs.png) | ![](fig/bspline_path_convex_hull_param_arc.png) |
 
+|              MINVO 避障凸包              | ongoing |
+|:----------------------------------------:|:-------:|
+| ![](fig/bspline_path_collision_hull.png) |   ...   |
 
 
 ## Simulator [WIP]
