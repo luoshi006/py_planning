@@ -33,10 +33,21 @@ A python motion planning demo
 |:-------------------------------------:|:---------------------------------------:|:-----------------------------------------------:|
 | ![](fig/bspline_path_convex_hull.png) | ![](fig/path_generator_bspline_obs.png) | ![](fig/bspline_path_convex_hull_param_arc.png) |
 
+## Local Planner
+### TODO
+- [ ] 轨迹生成失败后的处理
+- [ ] 快到 Goal 时候的特殊处理
+- [ ] 避障检测的算力优化
+  - 目前算力耗时主要在轨迹的凸包计算，将其移到循环外
+  - 考虑先使用 **折线膨胀** 预判断是否避障
+  - 由于折线本身有不小的误差，所以碰撞系数暂定 0.67
+
 |              MINVO 避障凸包              | ongoing |
 |:----------------------------------------:|:-------:|
 | ![](fig/bspline_path_collision_hull.png) |   ...   |
 
+## Path Follower
+- PurePursuit
 
 ## Simulator [WIP]
 - [ ] `collision_cir_poly` 对于锐角多边形可能有问题，待测试

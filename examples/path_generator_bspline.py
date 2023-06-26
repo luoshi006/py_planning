@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from queue import PriorityQueue
 
 import sys
 sys.path.append('..')
@@ -16,6 +17,8 @@ angle_ori = 90
 fov = 30
 fov_half = ((fov/2) // angle)*angle
 idx_path = 0
+path_dict = {}      # key: pathid, value: path
+path_cost_dq = PriorityQueue()
 
 # draw gif
 flg_draw = True
@@ -42,6 +45,7 @@ for shift0 in np.arange(angle_ori-fov_half, angle_ori+fov_half+1, angle):
                 sample_step = 1/2
                 cur_rad = 0
                 path_waypoints_list = []
+                path_waypoints_angle_list = []
                 for dis_cur in np.arange(0,3+sample_step,sample_step):
                     if dis_cur < 1.0:
                         angle_range = shift1 - shift0
@@ -60,7 +64,13 @@ for shift0 in np.arange(angle_ori-fov_half, angle_ori+fov_half+1, angle):
                     cur_way_pts_y = dis_cur*np.sin(cur_rad)
                     cur_pts = np.array([cur_way_pts_x,cur_way_pts_y])
                     path_waypoints_list.append(cur_pts)
+                    path_waypoints_angle_list.append(cur_rad)
                 path_waypoints_array = np.array(path_waypoints_list)
+                path_waypoints_angle_array = np.unwrap(np.array(path_waypoints_angle_list))
+                # calc cost
+                cost_angle = np.mean(np.abs(np.diff(path_waypoints_angle_array/np.pi)))     # [0,1]
+                cost_ref_goal = 0
+
                 vel_s = sample_step*5
                 vel0 = np.array([[np.cos(np.deg2rad(shift0))], [np.sin(np.deg2rad(shift0))]]) * vel_s*0.5
                 vel1 = np.array([[np.cos(np.deg2rad(shift3))], [np.sin(np.deg2rad(shift3))]]) * vel_s
@@ -69,6 +79,11 @@ for shift0 in np.arange(angle_ori-fov_half, angle_ori+fov_half+1, angle):
                 ctrl_pts = solver_cubic_uniform_bspline_2d_v3(path_waypoints_array.T, vel0, vel1)
                 # constructor for bspline
                 spl_cur = BSplinePath2D(ctrl_pts)
+                path_dict[idx_path] = spl_cur
+
+                cost_len   = spl_cur.arclen
+                cost_total = cost_angle + cost_ref_goal + cost_len*0
+                path_cost_dq.put((cost_total, idx_path))
 
                 idx_path = idx_path + 1
 
@@ -87,6 +102,14 @@ for shift0 in np.arange(angle_ori-fov_half, angle_ori+fov_half+1, angle):
                     plt.axis('equal')
                     plt.show(block=False)
                     plt.pause(0.001)
+# get the best path
+if not path_cost_dq.empty():
+    cost_ch, idx_ch = path_cost_dq.get()
+    print("get the choosed path idx {}, cost: {}".format(idx_ch, cost_ch))
+    if flg_draw:
+        show_pts_ch = path_dict[idx_ch].eval_arclen()
+        ax.plot(show_pts_ch[0,:], show_pts_ch[1,:], 'g', linewidth='2')
+
 
 print("====")
 print("%d path generated." % (idx_path))

@@ -1,4 +1,5 @@
 import numpy as np
+import time
 from scipy import interpolate
 from scipy import integrate
 from scipy import spatial
@@ -25,6 +26,8 @@ class BSplinePath2D:
             self.spl_der1 = self.spl.derivative()
             self.spl_der2 = self.spl.derivative(2)
             self.arclen = self.arclength()
+            self.bbox_leftdown = [np.min(ctrl_pts_2xn[0,:]), np.min(ctrl_pts_2xn[1,:])]
+            self.bbox_rightup = [np.max(ctrl_pts_2xn[0,:]), np.max(ctrl_pts_2xn[1,:])]
 
     def eval_list(self, step_size=0.02):
         assert 0 < self.arclen, "the spline param is null!"
@@ -180,14 +183,19 @@ class BSplinePath2D:
         return np.min(norm)
 
     def convex_hulls_of_curve(self, vehicle_contour_nx2_b):
+        t_0 = time.time()
         hulls = []
         hulls_idxs, hulls_vertex = self.MINVO_hull()
+        t_1 = time.time()
+        t_poly = 0
+        t_conv = 0
         if [] == vehicle_contour_nx2_b:
             for i in range(self.n - 2):
                 polyi = hulls_vertex[i][hulls_idxs[i],:]
                 hulls.append(polyi)
         else:
             for i in range(self.n -2):
+                t_2 = time.time()
                 # get polygon of ith segments
                 polyi = hulls_vertex[i][hulls_idxs[i], :]
                 # get segment of polygon, and convolution the segment endpoints and robot shape
@@ -213,8 +221,14 @@ class BSplinePath2D:
                 pts_conv_nx2 = np.array(pts_conv_nx2s)
                 rows = pts_conv_nx2.shape[0]*pts_conv_nx2.shape[1]
                 pts_conv_nx2 = pts_conv_nx2.reshape((rows,2))
+                t_3 = time.time()
                 hull = spatial.ConvexHull(pts_conv_nx2)
                 hulls.append(pts_conv_nx2[hull.vertices,:])
+                t_4 = time.time()
+                t_poly = t_poly + (t_3-t_2)
+                t_conv = t_conv + (t_4-t_3)
+        # convex hull: minvo: 0.004, seg_poly: 0.001, convex hull: 0.003
+        # print("convex hull: minvo: {:.3f}, seg_poly: {:.3f}, convex hull: {:.3f}".format(t_1-t_0, t_poly, t_conv))
         return hulls
 
 # ============ test =========================
