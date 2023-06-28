@@ -50,6 +50,15 @@ class BSplinePath2D:
         xy_nx2 = self.spl(s_interp)
         return xy_nx2.T
 
+    def eval_arc2u(self, step_arclen=0.01, t0=0, t1=1):
+        sample_factor = 2
+        approx_len = self.arclen * (t1-t0)
+        sample_num = int(max(10, approx_len // step_arclen))
+        u_ref = np.linspace(t0, t1, sample_num*sample_factor)
+        s_ref = self.arclength(u_ref)
+        s_lin = np.linspace(s_ref[0], s_ref[-1], sample_num)
+        s_interp = np.interp(s_lin, s_ref,u_ref)
+        return s_interp
     def eval(self, u):
         u = np.atleast_1d(u)  # force to array
         return self.spl(u)
@@ -92,7 +101,7 @@ class BSplinePath2D:
             t0 = np.atleast_1d(t0)
         #TODO: check [t0,t1] size equal
         # res = integrate.romberg(derivate_s, t0,t1, tol=1e-6, vec_func=True)
-        res = np.array([integrate.romberg(derivate_s, t0i, t1i, tol=1e-6, vec_func=True) for t0i,t1i in zip(t0,t1)])
+        res = np.array([integrate.romberg(derivate_s, t0i, t1i, tol=1e-5, vec_func=True) for t0i,t1i in zip(t0,t1)])
         return res.squeeze()
 
     def curvature(self, t):

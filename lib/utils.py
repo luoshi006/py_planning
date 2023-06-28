@@ -22,3 +22,8 @@ def get_transform(x, y, psi):
     trans = np.array([x,y]).reshape((2,1))
     rot = np.array([[cos(psi), -sin(psi)], [sin(psi), cos(psi)]])
     return trans, rot
+
+def wrap_pi(angle):
+    # https://stackoverflow.com/a/32266181
+    # wrap angle to (-pi, pi]
+    return (( -angle + np.pi) % (2.0 * np.pi ) - np.pi) * -1.0

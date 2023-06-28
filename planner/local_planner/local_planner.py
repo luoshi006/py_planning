@@ -7,7 +7,7 @@ sys.path.append('../..')
 from lib.path.cubic_uniform_bspline_2d import solver_cubic_uniform_bspline_2d_v3
 from lib.path.bspline_path import BSplinePath2D
 from lib.collision_detect.point_in_poly import point_in_polygon
-from lib.utils import get_transform
+from lib.utils import get_transform, wrap_pi
 
 class LocalPlanner:
     def __init__(self, robot_poly_nx2=[]):
@@ -23,7 +23,7 @@ class LocalPlanner:
         self.dq_cost_id = PriorityQueue()
 
         self.pose = np.zeros(3)         # robot pose
-        self.goal_b = np.array([0,0,0])
+        self.goal_g = np.array([0,0,0])
         self.flg_goal_psi_enable = False
 
         self.obs_poly_nx2s_b = []
@@ -79,9 +79,12 @@ class LocalPlanner:
             self.flg_goal_psi_enable = False
         else:
             self.flg_goal_psi_enable = True
-        goal_xy_b, goal_psi_b = self.trans_to_body(x,y,psi)
-        self.goal_b = np.append(goal_xy_b,goal_psi_b).flatten()
-        self.flg_need_replan = True
+
+        if np.linalg.norm(self.goal_g[:2] - np.array([x,y])) < 0.001 and wrap_pi(self.goal_g[2]-psi) < np.deg2rad(1):
+            pass
+        else:
+            self.goal_g = np.array([x,y,psi])
+            self.flg_need_replan = True
 
     def set_obs_polys(self, obs_poly_nx2s_g):
         obs_poly_nx2s_b = []
@@ -157,9 +160,11 @@ class LocalPlanner:
             spls_g[path_idx] = self.transform_spline_to_global(path_spl_b)
         return spls_g
 
-    def generate_paths(self):
+    def generate_paths(self, pathScale = 1):
         idx_path = 0
-        goal_dir = np.arctan2(self.goal_b[1], self.goal_b[0])
+        xy,psi = self.trans_to_body(self.goal_g[0], self.goal_g[1], self.goal_g[2])
+        goal_b = np.append(xy,psi).flatten()
+        goal_dir = np.arctan2(goal_b[1], goal_b[0])
         fov_scale = 1
         if abs(goal_dir) > self.fov:
             fov_scale = goal_dir // self.fov + 1
@@ -208,8 +213,8 @@ class LocalPlanner:
                                 step_scale = dis_cur - 2
                                 cur_rad = np.deg2rad(shift2 + angle_range*step_scale)
 
-                            cur_way_pts_x = dis_cur*np.cos(cur_rad)
-                            cur_way_pts_y = dis_cur*np.sin(cur_rad)
+                            cur_way_pts_x = pathScale*dis_cur*np.cos(cur_rad)
+                            cur_way_pts_y = pathScale*dis_cur*np.sin(cur_rad)
                             cur_pts = np.array([cur_way_pts_x,cur_way_pts_y])
 
                             if self.check_waypts_collision(cur_way_pts_x, cur_way_pts_y, cur_rad):
@@ -244,7 +249,7 @@ class LocalPlanner:
 
                         # calc cost
                         cost_angle = np.mean(np.abs(np.diff(path_waypoints_angle_array/np.pi)))
-                        cost_ref_goal = np.linalg.norm(path_waypoints_array[-1,:] - self.goal_b[:2])
+                        cost_ref_goal = np.linalg.norm(path_waypoints_array[-1,:] - goal_b[:2])
                         cost_curvature = np.max(np.abs(spl_cur.curvature(np.linspace(0,1,100))))
                         cost_len = spl_cur.arclen
                         cost_total = cost_angle + cost_ref_goal + cost_len*0
@@ -263,17 +268,24 @@ class LocalPlanner:
         self.path_feasible_b = path_dict
         self.path_best_g = self.transform_spline_to_global(path_dict[idx_best])
         # lp_gen: 0.0558, spl: 0.285, hull: 2.35, cost: 0.0321s
-        print("lp_gen: {:.3}, spl: {:.3}, hull: {:.3}, cost: {:.3}s".format(t_gen,t_spl,t_hul,t_cst))
+        # print("lp_gen: {:.3}, spl: {:.3}, hull: {:.3}, cost: {:.3}s".format(t_gen,t_spl,t_hul,t_cst))
         return True
 
     def check_need_replan(self):
         res = False
         if [] == self.path_best_g:
             res = True
-        if self.flg_need_replan:
+        elif self.flg_need_replan:
             res = True
-        if not res:
-            res = self.dist_traveled > 0.5*self.path_best_g.arclen
+        else:
+            # check path reach goal
+            path_goal = self.path_best_g.eval(1)    # 1x2
+            gap = np.linalg.norm(path_goal - self.goal_g[:2])
+            if gap < 0.02 :
+                res = False
+            elif not res:
+                res = self.dist_traveled > 1.2
+
         if res:
             self.flg_need_replan = False    # reset replan flg
         return res
@@ -282,14 +294,21 @@ class LocalPlanner:
         #TODO: check input param correct
         # print("Local Planner Run ...")
         if self.check_need_replan():
-            t_start = time.time()
-            if self.generate_paths():
+            path_scale = 1.0
+            dist_to_goal = np.linalg.norm(self.pose[:2] - self.goal_g[:2])
+            if dist_to_goal < 3 :
+                path_scale = dist_to_goal/3
+            if path_scale < 0.75:
+                print("path scale should lager than 0.75, too close")
+                return False
+
+            if self.generate_paths(path_scale):
                 self.dist_traveled = 0
             else:
                 #TODO:
-                assert False, "impl"
-            t_end = time.time()
-            print("lp time: {:.2f}s".format(t_end-t_start))
+                print("lp have no impl")
+
+
             return True
         return False
 

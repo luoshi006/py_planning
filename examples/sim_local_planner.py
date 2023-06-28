@@ -5,6 +5,7 @@ sys.path.append('../thirdparty/ir_sim')
 from ir_sim.env import EnvBase
 from lib.utils import scan_to_pointcloud
 from planner.local_planner.local_planner import LocalPlanner
+from tracking.pure_pursuit import PurePursuit
 import numpy as np
 
 # init param
@@ -26,6 +27,7 @@ vehicle_poly_nx2 = np.array([r, r
                         , r, -r]).reshape((4,2))
 
 lp = LocalPlanner(vehicle_poly_nx2)
+pp = PurePursuit(env.step_time)
 
 for i in range(300):
     # get info
@@ -42,11 +44,26 @@ for i in range(300):
         path_choosed = lp.get_best_path()
         path_feasible = lp.get_feasible_path()
 
-    vel_cmd = np.array([[2], [0.6]]);
-    ref_path_pts_2xn = path_choosed.eval_arclen()
-    env.draw_trajectory(ref_path_pts_2xn, traj_type='-b', refresh=True)
+        # sample path to traj
+        path_u = path_choosed.eval_arc2u(0.01)
+        traj_pos_nx2 = path_choosed.eval(path_u)
+        traj_tan = path_choosed.eval_angle(path_u)
+        traj_curv = path_choosed.curvature(path_u)
+        traj_vel = np.ones_like(traj_tan) * 0.5
+        print("path goal: {:.3f},{:.3f}, goal: {:.3f},{:.3f}".format(traj_pos_nx2[-1,0], traj_pos_nx2[-1,1], goal_point[0,0], goal_point[1,0]))
+        pp.set_traj(traj_pos_nx2, traj_tan, traj_curv, traj_vel)
 
-    env.step(vel_cmd)
+    pp.set_robot_pose(robot_pos[0], robot_pos[1], robot_pos[2])
+
+
+    pp.run()
+    vel_cmd = pp.get_cmd()
+    # print("pp cmd v: {:.3f}, w: {:.3f}".format(vel_cmd[0], vel_cmd[1]))
+
+
+    env.draw_trajectory(traj_pos_nx2.T, traj_type='-b', refresh=True)
+
+    env.step(np.array(vel_cmd))
     env.render(show_traj=True)
 
     if env.done(): break
