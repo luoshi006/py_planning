@@ -35,24 +35,20 @@ A python motion planning demo
 
 ## Local Planner
 - Goal 在探索范围内时，将探索范围边界缩放到 Goal
-### TODO
-- [ ] 轨迹生成失败后的处理
-- [x] 快到 Goal 时候的特殊处理
-- [ ] 避障检测的算力优化
-  - 目前算力耗时主要在轨迹的凸包计算，将其移到循环外
-  - 考虑先使用 **折线膨胀** 预判断是否避障
-  - 由于折线本身有不小的误差，所以碰撞系数暂定 0.67
+- 轨迹生成失败后，放大 `FOV` ，减小 `pathScale` 重新搜索
+- 算力优化
+  - 在 `generate_paths` 主循环内只对航点及航点连线做避障检测（按车体宽度膨胀）
+  - 生成轨迹簇后，对最优航点组生成 B 样条，进行 MINVO 避障检测 
+  - 注：凸包算法比较耗时
 
 |              MINVO 避障凸包              |       Local Planner 效果图        |
 |:----------------------------------------:|:------------------------------:|
 | ![](fig/bspline_path_collision_hull.png) | ![](fig/sim_local_planner.gif) |
 
+## Speed Profile
+
 ## Path Follower
 - PurePursuit
 
-## Simulator [WIP]
-- [ ] `collision_cir_poly` 对于锐角多边形可能有问题，待测试
-  - [ ] 需要把 碰撞点 可视化出来
-  - [ ] 有可能穿墙？
-- [ ] `motion_diff` 运动模型不精确
+## Simulator
 - [ ] `arrive` 到点判断升级
