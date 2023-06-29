@@ -43,7 +43,7 @@ class PurePursuit:
         dist_min = np.inf
         dist_last = np.inf
         idx_min = self.idx_near
-        range = min(self.traj.position.shape[0], self.idx_near+100)
+        range = self.traj.position.shape[0]
         # print("### {}, {}, {}".format(self.traj.position.shape[0], self.idx_near, range))
         traj_pos = self.traj.position
         robot_pos = pt.flatten()
@@ -102,7 +102,7 @@ class PurePursuit:
                 cord_angle = traj_tan[-1]
                 trans,rot = get_transform(p1[0], p1[1],cord_angle)
                 p2 = rot @ np.array([2*r,0]).reshape((2,1)) + trans
-                print("cord: r: {}, c0:{:.4f},{:.4f}, p1:{:.4f},{:.4f}, p2:{:.4f},{:.4f}, ang:{:.4f}".format(r, c0[0,0], c0[1,0], p1[0,0], p1[1,0], p2[0,0],p2[1,0], cord_angle))
+                # print("cord: r: {}, c0:{:.4f},{:.4f}, p1:{:.4f},{:.4f}, p2:{:.4f},{:.4f}, ang:{:.4f}".format(r, c0[0,0], c0[1,0], p1[0,0], p1[1,0], p2[0,0],p2[1,0], cord_angle))
                 
                 delta = p2 - p1
                 p1c = p1 - c0

@@ -42,7 +42,7 @@ for i in range(300):
     lp.set_obs_pts_body(lidar_pts_2xn_b.T)
     if lp.run():
         path_choosed = lp.get_best_path()
-        path_feasible = lp.get_feasible_path()
+        # path_feasible = lp.get_feasible_path()
 
         # sample path to traj
         path_u = path_choosed.eval_arc2u(0.01)
