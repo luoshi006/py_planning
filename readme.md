@@ -41,9 +41,9 @@ A python motion planning demo
   - 生成轨迹簇后，对最优航点组生成 B 样条，进行 MINVO 避障检测 
   - 注：凸包算法比较耗时
 
-|              MINVO 避障凸包              |       Local Planner 效果图        |
-|:----------------------------------------:|:------------------------------:|
-| ![](fig/bspline_path_collision_hull.png) | ![](fig/sim_local_planner.gif) |
+|              MINVO 避障凸包              |            航点折线膨胀                    |       Local Planner 效果图        |
+|:----------------------------------------:|:-------------------------------------------:|:------------------------------:|
+| ![](fig/bspline_path_collision_hull.png) | ![](fig/path_waypts_polyline_collision.png) | ![](fig/sim_local_planner.gif) |
 
 ## Speed Profile
 

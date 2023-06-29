@@ -125,6 +125,8 @@ class LocalPlanner:
     def check_waypts_polyline_collision(self, waypts_nx2):
         num = waypts_nx2.shape[0]
         r = 0.2
+        # fig, ax = plt.subplots()
+        # ax.plot(waypts_nx2[:, 0], waypts_nx2[:, 1], 'k-', linewidth='0.5')
         if [] != self.robot_poly_nx2_b:
             r = np.max(self.robot_poly_nx2_b[:,1]) # y axis max value
         for i in range(num-1):
@@ -141,6 +143,9 @@ class LocalPlanner:
 
             poly_open_nx2 = np.vstack((start_lr_2xn.T, end_rl_2xn.T))
             poly_close_nx2 = np.vstack((poly_open_nx2, poly_open_nx2[0,:]))
+
+            # poly_1 = Polygon(poly_close_nx2, alpha=0.4, fc='g')
+            # ax.add_patch(poly_1)
             # print("####", poly_open_nx2.T)
             for j in range(self.obs_pts_nx2_b.shape[0]):
                 obs_pt_1x2 = self.obs_pts_nx2_b[j, :]
@@ -374,6 +379,8 @@ class LocalPlanner:
 
 # ============ test =========================
 if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Polygon
     r = 0.2
     vehicle_poly_nx2 = np.array([r, r
                                     , -r, r
@@ -393,6 +400,7 @@ if __name__ == "__main__":
     scan = np.array([[ 3.41404722e+00,  2.84511605e+00,  2.42747239e+00,  2.32057790e+00, 2.30470485e+00,  2.28585626e+00,  2.32268190e+00,  2.35748940e+00, 2.40995955e+00,  2.46044446e+00,  2.50881615e+00,  2.57490896e+00, 2.61870719e+00,  2.68000000e+00,  2.73864798e+00,  2.83439591e+00, 1.14880414e+00,  1.04300463e+00,  1.01707749e+00,  9.75144401e-01, 9.47659227e-01,  9.05096692e-01,  8.76220309e-01,  8.46479202e-01, 8.15902722e-01,  7.84521044e-01,  7.52365140e-01,  7.19466741e-01, 6.85858316e-01,  6.51573032e-01,  6.26279797e-01,  5.90187671e-01, 5.62028688e-01,  5.24235240e-01,  4.93286926e-01,  4.53908839e-01, 4.26443480e-01,  3.96167401e-01,  3.58113469e-01],
                      [-1.47739013e+00, -1.12646111e+00, -8.73943820e-01, -7.54001454e-01, -6.69578643e-01, -5.86908124e-01, -5.19180906e-01, -4.49715147e-01, -3.81700088e-01, -3.10826414e-01, -2.37152946e-01, -1.61999538e-01, -8.22961874e-02,  5.95079541e-16,  8.60654784e-02,  1.78325072e-01, 8.34655046e-01,  8.09037299e-01,  8.41399654e-01,  8.59705413e-01, 8.89911226e-01,  9.05096668e-01,  9.33079831e-01,  9.60142157e-01, 9.86256939e-01,  1.01139840e+00,  1.03554174e+00,  1.05866312e+00, 1.08073973e+00,  1.10174978e+00,  1.13919867e+00,  1.15830847e+00, 1.19437170e+00,  1.21143610e+00,  1.24590048e+00,  1.26078022e+00, 1.31245798e+00,  1.36361702e+00,  1.39475974e+00]])
     lp.set_obs_pts_body(scan.T)
+    # lp.angle_ori = 90
     lp.run()
     path_choosed = lp.get_best_path()
     path_u = path_choosed.eval_arc2u(0.01)
