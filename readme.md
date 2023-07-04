@@ -2,11 +2,30 @@
 
 A python motion planning demo
 
-## BSplinePath
+## Global Planner
+- 参考 Far-Planner，使用静态地图生成可视图，并使用 A* 搜索最短路径
+- 可视图生成算法参考：https://tanergungor.blogspot.com/2015/04/robot-navigation-rotational-sweep.html
 
-#### 拟合样条曲线
+
+|              MAP 轮廓检测       |  生成可视图   |
+|:------------------------------:|:---:|
+| ![](fig/map_contours_edge.png) | ![](fig/map_visibility_graph.png)  |
+
+
+## Local Planner
 - 参考 CMU-LocalPlanner 生成轨迹算法，使用 Clamped Uniform B-Spline 表示轨迹
   - https://github.com/jizhang-cmu/ground_based_autonomy_basic
+- 一些逻辑处理
+  - Goal 在探索范围内时，将探索范围边界缩放到 Goal
+  - 轨迹生成失败后，放大 `FOV` ，减小 `pathScale` 重新搜索
+  - 算力优化
+    - 在 `generate_paths` 主循环内只对航点及航点连线做避障检测（按车体宽度膨胀）
+    - 生成轨迹簇后，对最优航点组生成 B 样条，进行 MINVO 避障检测
+    - 注：凸包算法比较耗时
+
+### BSplinePath
+
+#### 拟合样条曲线
 - 拟合时，给定等间距采样点，两端点的速度矢量
   - 《计算机辅助几何设计与非均匀有理 B 样条》
 
@@ -33,15 +52,8 @@ A python motion planning demo
 |:-------------------------------------:|:---------------------------------------:|:-----------------------------------------------:|
 | ![](fig/bspline_path_convex_hull.png) | ![](fig/path_generator_bspline_obs.png) | ![](fig/bspline_path_convex_hull_param_arc.png) |
 
-## Local Planner
-- Goal 在探索范围内时，将探索范围边界缩放到 Goal
-- 轨迹生成失败后，放大 `FOV` ，减小 `pathScale` 重新搜索
-- 算力优化
-  - 在 `generate_paths` 主循环内只对航点及航点连线做避障检测（按车体宽度膨胀）
-  - 生成轨迹簇后，对最优航点组生成 B 样条，进行 MINVO 避障检测 
-  - 注：凸包算法比较耗时
 
-|              MINVO 避障凸包              |            航点折线膨胀                    |       Local Planner 效果图        |
+|               MINVO 避障凸包膨胀               |            航点折线膨胀                    |       Local Planner 效果图        |
 |:----------------------------------------:|:-------------------------------------------:|:------------------------------:|
 | ![](fig/bspline_path_collision_hull.png) | ![](fig/path_waypts_polyline_collision.png) | ![](fig/sim_local_planner.gif) |
 
@@ -49,6 +61,7 @@ A python motion planning demo
 
 ## Path Follower
 - PurePursuit
+  - Kuwata, Yoshiaki, et al. "Motion planning in complex environments using closed-loop prediction." AIAA Guidance, Navigation and Control Conference and Exhibit. 2008.
 
 ## Simulator
 - [ ] `arrive` 到点判断升级
