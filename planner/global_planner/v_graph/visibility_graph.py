@@ -257,8 +257,6 @@ class implementation(object):
 
         for k in range(0,len(vertexes)):
             v = vertexes[k] # Vertex to check visibility from
-            # if np.linalg.norm(v.numpy() - np.array([135, 75])) < 1:
-            #     print(v.numpy())
 
             # Sort vertexes according to the angle
             for point in sorted_vertexes:
@@ -277,8 +275,6 @@ class implementation(object):
                         S.append(edge)
                     elif (round(vi.dist_segment(edge),2) == 0.  and edge in S) or (round(v.dist_segment(edge),2) == 0. and edge in S):
                         S.remove(edge)
-                if np.linalg.norm(vi.numpy() - np.array([310, 215])) < 1 and np.linalg.norm(v.numpy() - np.array([135, 75])) < 1:
-                    print(vi.numpy())
                 # create a sweep line from vertex v to vi with an angle offset of 0.001 and a magnitude of Len_inf
                 vi_SL = Point(v.x+(Len_inf)*np.cos(vi.alph + 0.001),v.y+(Len_inf)*np.sin(vi.alph + 0.001))
                 sweep_line = Segment(v,vi_SL)
@@ -287,11 +283,14 @@ class implementation(object):
 
                 # Calculate the distance of the sweepline to every edge in S
                 for s_edge in S:
-                    # print("angle: {:.3f}, {:.3f}".format(s_edge.angle(), sweep_line1.angle()))
                     temp_point= sweep_line.intersection_point(s_edge)
                     s_edge.distance = v.dist(temp_point)
-                    if abs(s_edge.angle() + sweep_line1.angle() - np.pi) < 1E-6 and s_edge.distance < 0.001:
-                        #FIXME: 对于共线重合的场景，需要全局考虑，此处临时修复
+
+                    # check collinear
+                    vec_edge = s_edge.p1.numpy() - s_edge.p2.numpy()
+                    vec_sweep = sweep_line1.p1.numpy() - sweep_line1.p2.numpy()
+                    chk_col = np.cross(vec_edge, vec_sweep)
+                    if 0 == chk_col.item():
                         s_edge.distance = 10000
                 ##############################################################
 
@@ -299,8 +298,6 @@ class implementation(object):
                 S = sorted(S, key=lambda x: x.distance)
 
                 # Check for visibility
-                if np.linalg.norm(vi.numpy() - np.array([310, 215])) < 1 and np.linalg.norm(v.numpy() - np.array([135, 75])) < 1:
-                    print("xxx1")
                 if self.is_visible(v,vi,S, sweep_line1):
                     visibility.append(Segment(v,vi))
 
@@ -323,9 +320,8 @@ class VisibilityGraph:
 if __name__ == "__main__":
     edge = Segment(Point(310,215), Point(305,211))
     sweep_line = Segment(Point(135,75), Point(310,215))
-    xx = sweep_line.intersect(edge)  # should be true
-    print(xx[0])
-    # print(xx[1].numpy())
 
-    pt = sweep_line.intersection_point(edge)
-    print(pt.numpy())
+    vec1 = np.array([310,215]) - np.array([305,211])
+    vec2 = np.array([135,75]) - np.array([310,215])
+    xx = np.cross(vec1, vec2)
+    print(xx)
