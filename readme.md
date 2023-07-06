@@ -3,16 +3,22 @@
 A python motion planning demo
 
 ## Global Planner
-- 参考 Far-Planner，使用静态地图生成可视图，并使用 A* 搜索最短路径
+
+- 参考 Far-Planner，使用静态地图生成可视图，并使用 dijkstra 搜索最短路径
+  - 以车体轮廓构造 kernel，对障碍物进行膨胀
+  - 在膨胀后的地图中，构建障碍物轮廓，并使用多边形拟合
+    - [tutorial_py_contours_begin](https://docs.opencv.org/4.7.0/d4/d73/tutorial_py_contours_begin.html)
+    - [approxPolyDP](https://docs.opencv.org/4.7.0/d3/dc0/group__imgproc__shape.html)
 - 可视图生成算法参考：https://tanergungor.blogspot.com/2015/04/robot-navigation-rotational-sweep.html
 
 
-|              MAP 轮廓检测       |  生成可视图   |
-|:------------------------------:|:---:|
-| ![](fig/map_contours_edge.png) | ![](fig/map_visibility_graph.png)  |
+|              MAP 轮廓检测       |  生成可视图   |  搜索最短路径   |
+|:------------------------------:|:---:|:---:|
+| ![](fig/map_contours_edge.png) | ![](fig/map_visibility_graph.png)  |  ![](fig/map_visibility_graph_shortest_path.png)   |
 
 
 ## Local Planner
+
 - 参考 CMU-LocalPlanner 生成轨迹算法，使用 Clamped Uniform B-Spline 表示轨迹
   - https://github.com/jizhang-cmu/ground_based_autonomy_basic
 - 一些逻辑处理
@@ -26,6 +32,7 @@ A python motion planning demo
 ### BSplinePath
 
 #### 拟合样条曲线
+
 - 拟合时，给定等间距采样点，两端点的速度矢量
   - 《计算机辅助几何设计与非均匀有理 B 样条》
 
@@ -34,6 +41,7 @@ A python motion planning demo
 | ![](fig/path_generator_bspline_default.png)  | ![](fig/path_generator_bspline_fov_180.png) |
 
 #### BSplinePath Impl
+
 - **MINVO 凸包**
   - 参考 MIT-MINVO / Mader 中的 MINVO，代替默认凸包进行避障检测
     - https://github.com/mit-acl/minvo
@@ -60,8 +68,10 @@ A python motion planning demo
 ## Speed Profile
 
 ## Path Follower
+
 - PurePursuit
   - Kuwata, Yoshiaki, et al. "Motion planning in complex environments using closed-loop prediction." AIAA Guidance, Navigation and Control Conference and Exhibit. 2008.
 
 ## Simulator
+
 - [ ] `arrive` 到点判断升级

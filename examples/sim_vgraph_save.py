@@ -9,6 +9,7 @@ from lib.utils import scan_to_pointcloud
 from planner.global_planner.v_graph.visibility_graph import VisibilityGraph, Point, Segment
 
 import cv2
+import csv
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -18,7 +19,7 @@ goal_point = np.array([9, 9, 0]).reshape(3, 1)
 
 fig, ax = plt.subplots()
 
-env = EnvBase('../resource/grid_map.yaml'  # grid_map, map_ningde
+env = EnvBase('../resource/cave.yaml'  # cave, map_ningde
               # , control_mode='keyboard'
               , init_args={'no_axis': False}
               , collision_mode='stop'
@@ -75,10 +76,6 @@ for i in range(len(contours_refine)):
         if i==0 and j == 0: ax.plot(pt[1], pt[0], 'r.', alpha=0.7, label='vertex')
         else: ax.plot(pt[1], pt[0], 'r.', alpha=0.7)
 
-        # print("({:.3f},{:.3f}) ".format(pt[0], pt[1]))
-
-
-
         pt_idx = j+1
         if j == len(contour_i)-1: pt_idx = 0
         pt = contour_i[pt_idx].flatten()
@@ -92,20 +89,14 @@ for i in range(len(contours_refine)):
 v_graph = VisibilityGraph(contours_dict, edge)
 v_edge = v_graph.v_edge
 
+csv_file = 'resource/cave.csv'
+v_graph.save(csv_file)
+print("v_graph save to {}".format(csv_file))
+
 for i in range(len(v_edge)):
     seg_i = v_edge[i]
     if i==0: ax.plot([seg_i.p1.y, seg_i.p2.y], [seg_i.p1.x, seg_i.p2.x], 'g-', alpha=0.4, linewidth='0.3', label="visibility edge")
     else: ax.plot([seg_i.p1.y, seg_i.p2.y], [seg_i.p1.x, seg_i.p2.x], 'g-', alpha=0.4, linewidth='0.3')
-
-
-# plot vertex
-
-# map_static_cv_inflate_rgb = 255 - cv2.cvtColor(map_static_cv_inflate, cv2.COLOR_GRAY2RGB)
-# cv2.drawContours(map_static_cv_inflate_rgb, contours_refine, -1, (0,255,0), 2)
-
-# cv2.imshow("dbg", map_static_cv_inflate_rgb)
-# cv2.waitKey(0)
-# cv2.imwrite("fig/map_inflate_contours1.png", map_static_cv_inflate_rgb)
 
 
 ax.imshow(map_static.T, cmap='Greys', origin='lower')
@@ -116,6 +107,5 @@ fig.waitforbuttonpress()
 
 fig.savefig("map_contours_edge.png", dpi=400)
 
-print("map_static")
 
 # env.end(ani_name='grid_map', ending_time=20, ani_kwargs={'subrectangles': True})

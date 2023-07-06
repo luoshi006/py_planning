@@ -1,7 +1,13 @@
 import numpy as np
 import math
-# import matplotlib.pyplot as plt
+import csv
+import matplotlib.pyplot as plt
 import matplotlib.path as mplPath
+
+import os, sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from path_search import edge_to_search_graph, dijkstra_search
+
 
 # https://github.com/enriquea52/Visibility-Graph.git
 
@@ -303,18 +309,196 @@ class implementation(object):
 
         return self.remove_repeated(visibility) # Return the visibility edges excluding repeated ones
 
+    def get_visibility_edge_for_pt(self, pt):
+        vertexes = self.get_vertexes_from_dict(self.vertexes)
+        sorted_vertexes = self.copy_vertex_list(vertexes)
+        visibility = []
+        Len_look = 10000
+
+        v = pt
+        for point in sorted_vertexes:
+            point.alpha(self.angle(point.y-v.y, point.x-v.x))
+
+        sorted_vertexes = sorted(sorted_vertexes, key=lambda x: x.alph)
+        half_line = Segment(v,Point(v.x+Len_look, v.y))
+        S = self.S_inicialization(half_line, v)
+
+        for vi in sorted_vertexes:
+            for edge in self.obstacles_edges:
+                if round(vi.dist_segment(edge),2) == 0. and edge not in S:
+                    S.append(edge)
+                elif (round(vi.dist_segment(edge),2) == 0.  and edge in S) or (round(v.dist_segment(edge),2) == 0. and edge in S):
+                    S.remove(edge)
+            vi_SL = Point(v.x+(Len_look)*np.cos(vi.alph + 0.001),v.y+(Len_look)*np.sin(vi.alph + 0.001))
+            sweep_line = Segment(v,vi_SL)
+            sweep_line1 = Segment(v,vi)
+            for s_edge in S:
+                temp_point= sweep_line.intersection_point(s_edge)
+                s_edge.distance = v.dist(temp_point)
+
+                # check collinear
+                vec_edge = s_edge.p1.numpy() - s_edge.p2.numpy()
+                vec_sweep = sweep_line1.p1.numpy() - sweep_line1.p2.numpy()
+                chk_col = np.cross(vec_edge, vec_sweep)
+                if 0 == chk_col.item():
+                    s_edge.distance = 10000
+            S = sorted(S, key=lambda x: x.distance)
+            if self.is_visible(v,vi,S, sweep_line1):
+                visibility.append(Segment(v,vi))
+
+        return visibility
 class VisibilityGraph:
-    def __init__(self, contours_dict, edge) -> None:
+    def __init__(self, contours_dict=[], edge=[]) -> None:
         """
             contours_dict: {id, points}
             edge: [segment], contours of obstacle
         """
         self.contours_dict = contours_dict
         self.edge = edge
-        rspa = implementation(contours_dict, edge)
-        self.v_edge = rspa.rotational_sweep()
+        self.v_edge = []
+        self.v_edge_goal = []
+        self.v_edge_start = []
+        if [] == contours_dict or [] == edge:
+            pass
+        else:
+            rspa = implementation(contours_dict, edge)
+            self.v_edge = rspa.rotational_sweep()
 
-    # def get_vertex_list
+    def save(self, filename='tmp.csv'):
+        with open(filename, 'w', newline='') as f:
+            writer = csv.writer(f, quoting=csv.QUOTE_NONE, quotechar='', escapechar='/')
+            # write header
+            writer.writerow(['# The file is automatically generated. And should not be modified.'])
+            writer.writerow(['# v-graph obstacle polygon. format: id  x  y.'])
+
+            # write obstacle polygon
+            for i in range(len(self.contours_dict)):
+                cti =  self.contours_dict[i]
+                for j in range(len(cti)):
+                    pt = cti[j]
+                    writer.writerow([i, f'{pt.x:.3g}', f'{pt.y:.3g}'])
+
+            # write edge Separator
+            writer.writerow(['# v-graph visibility edge. format: start.x  start.y  end.x  end.y'])
+            for i in range(len(self.v_edge)):
+                seg_i = self.v_edge[i]
+                writer.writerow([f'{seg_i.p1.x:.3g}', f'{seg_i.p1.y:.3g}', f'{seg_i.p2.x:.3g}', f'{seg_i.p2.y:.3g}'])
+
+    def load(self, filename):
+        with open(filename, newline='', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            stage = 0
+            contours_dict = {}
+            contours_edge = []
+            v_edge = []
+            for row in reader:
+                if row[0].startswith("#"):
+                    stage = stage + 1
+                    continue
+                if 1 == stage:
+                    # header
+                    pass
+                elif 2 == stage:
+                    # parse obstacle polygon
+                    id = int(row[0])
+                    if not bool(contours_dict.get(id)):
+                        contours_dict[id] = []
+                    contours_dict[id].append(Point(int(row[1]), int(row[2])))
+                elif 3 == stage:
+                    # parse visibility edge
+                    p1 = Point(int(row[0]),int(row[1]))
+                    p2 = Point(int(row[2]),int(row[3]))
+                    v_edge.append(Segment(p1, p2))
+            for i in range(len(contours_dict)):
+                poly = contours_dict[i]
+                for j in range(len(poly)):
+                    next_idx = j+1
+                    if j==len(poly)-1 : next_idx = 0
+                    pt1 = poly[j]
+                    pt2 = poly[next_idx]
+                    contours_edge.append(Segment(pt1, pt2))
+            self.contours_dict = contours_dict
+            self.v_edge = v_edge
+            self.edge = contours_edge
+
+    def update_pt(self):
+        v_alg = implementation(self.contours_dict, self.edge)
+        self.v_edge_start = v_alg.get_visibility_edge_for_pt(self.start_pt)
+        self.v_edge_goal  = v_alg.get_visibility_edge_for_pt(self.goal_pt)
+
+    def set_start_pt(self, x, y):
+        self.start_pt = Point(x,y)
+
+    def set_goal_pt(self, x, y):
+        self.goal_pt = Point(x,y);
+
+    def get_contour_pts_nx2s(self):
+        # list of nx2 array
+        res = []
+        for i in range(len(self.contours_dict)):
+            poly = self.contours_dict[i]
+            pts_nx2s = [pt.numpy() for pt in poly]
+            res.append(np.array(pts_nx2s))
+        return res
+
+    def get_vedge_nx4(self):
+        res = []
+        for i in range(len(self.v_edge)):
+            seg = self.v_edge[i]
+            res.append(np.array([seg.p1.x, seg.p1.y, seg.p2.x, seg.p2.y]))
+        for i in range(len(self.v_edge_start)):
+            seg = self.v_edge_start[i]
+            res.append(np.array([seg.p1.x, seg.p1.y, seg.p2.x, seg.p2.y]))
+        for i in range(len(self.v_edge_goal)):
+            seg = self.v_edge_goal[i]
+            res.append(np.array([seg.p1.x, seg.p1.y, seg.p2.x, seg.p2.y]))
+        return np.array(res)
+
+    def get_shortest_path(self):
+        res = []
+        if [] == self.start_pt or [] == self.goal_pt:
+            print("start and goal point should set.")
+            return res
+        edges = self.get_vedge_nx4()
+        search_graph = edge_to_search_graph(edges)
+        return dijkstra_search(search_graph, self.start_pt.numpy(), self.goal_pt.numpy())
+
+
+    def draw(self, ax=[], transpose=False):
+        if [] == ax:
+            fig, ax = plt.subplots()
+        contour_pts_nx2s = self.get_contour_pts_nx2s()
+        v_edge_nx4 = self.get_vedge_nx4()
+        idx = [0]
+        idy = [1]
+        if transpose:
+            idx = [1]
+            idy = [0]
+        start = self.start_pt.numpy()
+        goal = self.goal_pt.numpy()
+        ax.plot(start[idx], start[idy], 'gs', label='start')
+        ax.plot(goal[idx], goal[idy], 'rp', label='goal')
+        for i in range(len(contour_pts_nx2s)):
+            poly = contour_pts_nx2s[i]
+            poly_closed = np.vstack((poly, poly[0]))
+            if 0==i:
+                ax.plot(poly[:,idx], poly[:,idy], 'r.', label='vertex')
+                ax.plot(poly_closed[:,idx], poly_closed[:,idy], 'b-', label='contour')
+            else:
+                ax.plot(poly[:,idx], poly[:,idy], 'r.')
+                ax.plot(poly_closed[:,idx], poly_closed[:,idy], 'b-')
+        idx = [0,2]
+        idy = [1,3]
+        if transpose:
+            idx = [1,3]
+            idy = [0,2]
+        for i in range(v_edge_nx4.shape[0]):
+            seg = v_edge_nx4[i,:]
+            if 0==i: ax.plot(seg[idx], seg[idy], 'g-', alpha=0.6, linewidth='0.3', label="visibility edge")
+            else: ax.plot(seg[idx], seg[idy], 'g-', alpha=0.6, linewidth='0.3')
+        return ax
+
+
 
 # ============ test =========================
 if __name__ == "__main__":
