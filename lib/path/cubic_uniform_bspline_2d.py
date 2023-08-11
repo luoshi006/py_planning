@@ -176,6 +176,247 @@ def solver_cubic_uniform_bspline_2d_v3(way_pts_2xn, vel0=[], vel1=[], acc0=[], a
     return D.T
 
 
+def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles):
+    import osqp
+    from scipy import sparse
+
+    def wrap_pi(angle):
+        # wrap angle to (-pi, pi]
+        return (( -angle + np.pi) % (2.0 * np.pi ) - np.pi) * -1.0    # calc chord for knots
+    p_ = 3
+    n_ = way_pts_2xn.shape[1] +2 -1
+    dim_ = way_pts_2xn.shape[0]
+
+    knots_inner = np.linspace(0,1,n_-1).tolist()
+    knots_ = knots_inner[:1]*p_ + knots_inner + knots_inner[-1:]*p_
+
+    # calculate basis matrix for break points
+    MB = spcol(np.array(knots_inner), np.array(knots_), p_)
+
+    # calculate derivative basis matrix
+    # https://pages.mtu.edu/~shene/COURSES/cs3621/NOTES/spline/B-spline/bspline-derv.html
+    # https://github.com/lewisli/PFA-CFCA/blob/master/thirdparty/fda_matlab/notneeded/bspline.m
+    Q2P = np.zeros((n_,n_+1))
+    for i in np.arange(n_):
+        a = p_/(knots_[i+p_+1] - knots_[i+1])
+        Q2P[i,i] = -1*a
+        Q2P[i,i+1] = 1*a
+    MBV = spcol(np.array(knots_inner), np.array(knots_[1:-1]), p_-1)
+    MBVV = MBV @ Q2P
+    A = np.vstack((MB, MBVV[0,:]))
+    A = np.vstack((A, MBVV[-1,:]))
+
+    vel_dir = [way_angles[0], way_angles[-1]]
+    v = np.array([np.cos(vel_dir), np.sin(vel_dir)]).T
+    B = np.vstack((way_pts_2xn.T, v))
+
+    ctrl_pts_nx2 = np.linalg.inv(A) @ B
+
+    # smooth
+    # 固定两侧端点各两个控制点，优化变量 2*(n_+1-4)
+    # minimize        0.5 x' P x + q' x
+    # subject to      l <= A x <= u
+
+    # cost_smooth
+    # sum{ ||2P_k - P_{k-1} - P_{k+1}||^2 }
+    # 4*p_k**2 - 4*p_k*p_km1 - 4*p_k*p_kp1 + p_km1**2 + 2*p_km1*p_kp1 + p_kp1**2
+
+    # cost_deviation
+    # MB 去掉头尾各两行，计算 L2 范数
+    # p_k**2 - 2*p_k*p_kref + p_kref**2
+    print(0)
+    X = np.hstack((ctrl_pts_nx2[:,0], ctrl_pts_nx2[:,1]))   # [x0, x1,..., xn, y0, y1,..., yn]
+    pt_ref = np.hstack((way_pts_2xn[0,:],way_pts_2xn[1,:]))
+    c_off = n_+1
+    w_off = way_pts_2xn.shape[1]
+    P = np.zeros(((n_+1)*dim_, (n_+1)*dim_))
+    Q = np.zeros((n_+1)*dim_)
+
+    A = np.identity((n_+1)*dim_)
+    win_size = 0.5
+    delta = np.ones((n_+1)*dim_)*win_size
+    delta[0:2] = 0
+    delta[n_-1:n_+1] = 0
+    delta[c_off:c_off+2] = 0
+    delta[n_-1+c_off:n_+1+c_off] = 0
+
+    lb = X - delta
+    ub = X + delta
+
+    w_smooth = 0.1
+    w_deviation = 1-w_smooth
+
+    for k in np.arange(1, n_):
+        # calc smooth
+        P[k-1,k-1] += 1 * w_smooth
+        P[k-1,k]   += -2 * w_smooth
+        P[k-1,k+1] += 1 * w_smooth
+
+        P[k,k-1] += -2 * w_smooth
+        P[k,k]   += 4 * w_smooth
+        P[k,k+1] += -2 * w_smooth
+
+        P[k+1,k-1] += 1 * w_smooth
+        P[k+1,k]   += -2 * w_smooth
+        P[k+1,k+1] += 1 * w_smooth
+
+        P[k-1+c_off,k-1+c_off] += 1 * w_smooth
+        P[k-1+c_off,k+c_off]   += -2 * w_smooth
+        P[k-1+c_off,k+1+c_off] += 1 * w_smooth
+
+        P[k+c_off,k-1+c_off] += -2 * w_smooth
+        P[k+c_off,k+c_off]   += 4 * w_smooth
+        P[k+c_off,k+1+c_off] += -2 * w_smooth
+
+        P[k+1+c_off,k-1+c_off] += 1 * w_smooth
+        P[k+1+c_off,k+c_off]   += -2 * w_smooth
+        P[k+1+c_off,k+1+c_off] += 1 * w_smooth
+
+        # calc deviation
+        if k<n_-2:
+            # k in [1,7] -> get m1-3
+            #   m1**2*p_k**2   + 2*m1*m2*p_k*p_kp1   + 2*m1*m3*p_k*p_kp2 - 2*m1*p_kref*p_k
+            # + m2**2*p_kp1**2 + 2*m2*m3*p_kp1*p_kp2 - 2*m2*p_kref*p_kp1
+            # + m3**2*p_kp2**2 - 2*m3*p_kref*p_kp2   + p_kref**2
+            m1 = MB[k,k]
+            m2 = MB[k,k+1]
+            m3 = MB[k,k+2]
+            P[k,k]   += m1**2 * w_deviation
+            P[k,k+1] += m1*m2 * w_deviation
+            P[k,k+2] += m1*m3 * w_deviation
+            P[k+1,k]   += m1*m2 * w_deviation
+            P[k+1,k+1] += m2**2 * w_deviation
+            P[k+1,k+2] += m2*m3 * w_deviation
+            P[k+2,k]   += m1*m3 * w_deviation
+            P[k+2,k+1] += m2*m3 * w_deviation
+            P[k+2,k+2] += m3**2 * w_deviation
+
+            P[k+c_off,k+c_off]   += m1**2 * w_deviation
+            P[k+c_off,k+c_off+1] += m1*m2 * w_deviation
+            P[k+c_off,k+c_off+2] += m1*m3 * w_deviation
+            P[k+1+c_off,k+c_off]   += m1*m2 * w_deviation
+            P[k+1+c_off,k+c_off+1] += m2**2 * w_deviation
+            P[k+1+c_off,k+c_off+2] += m2*m3 * w_deviation
+            P[k+2+c_off,k+c_off]   += m1*m3 * w_deviation
+            P[k+2+c_off,k+c_off+1] += m2*m3 * w_deviation
+            P[k+2+c_off,k+c_off+2] += m3**2 * w_deviation
+
+            Q[k]   += -1*m1*pt_ref[k] * w_deviation
+            Q[k+1] += -1*m2*pt_ref[k] * w_deviation
+            Q[k+2] += -1*m3*pt_ref[k] * w_deviation
+
+            Q[k+c_off]   += -1*m1*pt_ref[k+w_off] * w_deviation
+            Q[k+c_off+1] += -1*m2*pt_ref[k+w_off] * w_deviation
+            Q[k+c_off+2] += -1*m3*pt_ref[k+w_off] * w_deviation
+
+            # constraint half plane
+            pt_k = np.array([pt_ref[k], pt_ref[k+w_off]])
+            # look forward
+            pt_kp1 = np.array([pt_ref[k+1], pt_ref[k+w_off+1]])
+            pt_kp2 = pt_kp1 ## XXX
+            if n_-3 != k:
+                pt_kp2 = np.array([pt_ref[k+2], pt_ref[k+w_off+2]])
+
+            p1 = pt_kp1 - pt_k
+            p2 = pt_kp2 - pt_k
+            angle_0 = way_angles[k]
+            angle_1 = np.arctan2(p1[1], p1[0])
+            angle_2 = np.arctan2(p2[1], p2[0])
+
+            delta_1 = wrap_pi(angle_1 - angle_0)
+            delta_2 = wrap_pi(angle_2 - angle_0)
+            eps = np.deg2rad(0.5)
+            flg_constraint = False
+            if abs(delta_1) > eps:
+                if delta_1 > 0 and delta_2 > 0 :
+                    angle_n = angle_0 + np.pi*0.5
+                    flg_constraint = True
+                elif delta_1 < 0 and delta_2 < 0 :
+                    angle_n = angle_0 - np.pi*0.5
+                    flg_constraint = True
+            elif abs(delta_2) > eps:    # delta1 == 0, delta2 != 0
+                if delta_2 > 0:
+                    angle_n = angle_0 + np.pi*0.5
+                    flg_constraint = True
+                else:
+                    angle_n = angle_0 - np.pi*0.5
+                    flg_constraint = True
+            if not flg_constraint:
+                # look backward
+                pt_km1 = np.array([pt_ref[k-1], pt_ref[k+w_off-1]])
+                pt_km2 = pt_km1 ## XXX
+                if 1 != k:
+                    pt_km2 = np.array([pt_ref[k-2], pt_ref[k+w_off-2]])
+
+                pm1 = pt_km1 - pt_k
+                pm2 = pt_km2 - pt_k
+                angle_m1 = np.arctan2(pm1[1], pm1[0])
+                angle_m2 = np.arctan2(pm2[1], pm2[0])
+
+                delta_m1 = wrap_pi(angle_m1 - angle_0)
+                delta_m2 = wrap_pi(angle_m2 - angle_0)
+                if abs(delta_m1) > eps:
+                    if delta_m1 > 0 and delta_m2 > 0 :
+                        angle_n = angle_0 + np.pi*0.5
+                        flg_constraint = True
+                    elif delta_m1 < 0 and delta_m2 < 0 :
+                        angle_n = angle_0 - np.pi*0.5
+                        flg_constraint = True
+                elif abs(delta_m2) > eps:    # delta1 == 0, delta2 != 0
+                    if delta_m2 > 0:
+                        angle_n = angle_0 + np.pi*0.5
+                        flg_constraint = True
+                    else:
+                        angle_n = angle_0 - np.pi*0.5
+                        flg_constraint = True
+
+            if flg_constraint:
+                nx = np.cos(angle_n)
+                ny = np.sin(angle_n)
+                ap = np.zeros((1,(n_+1)*dim_))
+                ap[0,k] = m1 * nx
+                ap[0,k+1] = m2 * nx
+                ap[0,k+2] = m3 * nx
+                ap[0,k+c_off] = m1*ny
+                ap[0,k+c_off+1] = m2*ny
+                ap[0,k+c_off+2] = m3*ny
+                dk = -1 * (nx*pt_k[0] + ny*pt_k[1])
+                lbp = -dk
+                ubp = -dk + 10
+                A = np.vstack((A, ap))
+                lb = np.hstack((lb, lbp))
+                ub = np.hstack((ub, ubp))
+
+
+    Ps = sparse.csc_matrix(P)
+    As = sparse.csc_matrix(A)
+    problem = osqp.OSQP()
+
+    problem.setup(Ps, Q, As, lb, ub)
+    res = problem.solve()
+
+    ctrl_pts_new_nx2 = res.x.reshape(dim_,n_+1).T
+
+    if __name__ == "__main__":
+        fig,ax = plt.subplots()
+        ax.plot(way_pts_2xn[0,:], way_pts_2xn[1,:],'r*', markersize=9, label='way pts')
+        ax.plot(ctrl_pts_nx2[:,0], ctrl_pts_nx2[:,1], 'k.', markersize=4, label='ctrl pts Interpolate')
+        ax.plot(ctrl_pts_new_nx2[:,0], ctrl_pts_new_nx2[:,1], 'b1', markersize=6, label='ctrl pts OSQP half plane')
+        u_show = np.linspace(0,1,100)
+        spl_show_basis = spcol(u_show, knots_, p_)
+        show_pts_nx2 = spl_show_basis @ ctrl_pts_nx2
+        ax.plot(show_pts_nx2[:,0], show_pts_nx2[:,1], 'g-', linewidth='1', label='spline Interpolate')
+        show_pts_new_nx2 = spl_show_basis @ ctrl_pts_new_nx2
+        ax.plot(show_pts_new_nx2[:,0], show_pts_new_nx2[:,1], 'm-', linewidth='1', label='spline OSQP half plane')
+        plt.axis('equal')
+        plt.legend()
+        plt.grid()
+        # plt.title('Interpolate')
+        plt.savefig('waypoints_OSQP_weight_constraint.png', dpi=300)
+        plt.show()
+
+    return ctrl_pts_new_nx2.T
+
 def delta(knots, i):
     return knots[i+1]-knots[i]
 
@@ -222,29 +463,15 @@ def knots_quasi_uniform(ctrl_pts_num, degree=3):
 
 # test
 if __name__ == "__main__":
-    # wpt_list = [
-    #     [0., 0.0188, 0.0749, 0.1673, 0.2944, 0.4539, 0.6092, 0.7832, 0.9746, 1.1818, 1.4030, 1.6045, 1.8144, 2.0318, 2.2559,
-    #      2.4859] \
-    #     ,
-    #     [0., 0.1991, 0.3929, 0.5761, 0.7438, 0.8910, 1.0338, 1.1603, 1.2688, 1.3576, 1.4252, 1.5051, 1.5709, 1.6222, 1.6585,
-    #      1.6793]]
 
-    wpt_list = np.array([
-        [0., 0.11672268, 0.4539905 , 0.87690559, 1.40306285, 1.92224408, 2.4859] \
-       ,[0., 0.48618496, 0.89100652, 1.21697847, 1.42527704, 1.59842976, 1.6793]])
+    # wpt_list = np.array([
+    #     [0., 0.11672268, 0.4539905 , 0.87690559, 1.40306285, 1.92224408, 2.4859] \
+    #    ,[0., 0.48618496, 0.89100652, 1.21697847, 1.42527704, 1.59842976, 1.6793]])
+    # wpt_angle = np.array([1.5707, 1.3352, 1.0996, 0.9464, 0.79325, 0.69368, 0.59411])
+    wpt_list = np.array([[ 0, 0.5, 1, 1.5, 2, 2,   2,   2, 2]
+                         ,[0, 0,   0, 0,   0, 0.5, 1, 1.5, 2]])
+    psi = np.pi/2
+    wpt_angle = np.array([ 0, 0,   0, 0,   0, psi, psi, psi, psi])
 
-    delta_s = 1 # np.linalg.norm( np.array(wpt_list)[:,1] - np.array(wpt_list)[:,0])
 
-    angle0 = 90
-    rad0 = np.deg2rad(angle0)
-    angle1 = 34.04
-    rad1 = np.deg2rad(angle1)
-    vel0 = np.array([[np.cos(rad0)],[np.sin(rad0)]]) * delta_s
-    vel1 = np.array([[np.cos(rad1)],[np.sin(rad1)]]) * delta_s
-
-    # solver_cubic_uniform_bspline_2d(np.array(wpt_list))
-    solver_cubic_uniform_bspline_2d_v3(wpt_list, vel0, vel1, np.zeros((2,1)), np.zeros((2,1)))
-    # test_tau = np.linspace(0,1,6)
-    # knots = knots_quasi_uniform(4)
-    # basis = spcol(test_tau, knots, 3)
-    # print(basis)
+    ctrl_pts = solver_cubic_uniform_bspline_2d_v4(wpt_list, wpt_angle)

@@ -35,10 +35,14 @@ A python motion planning demo
 
 - 拟合时，给定等间距采样点，两端点的速度矢量
   - 《计算机辅助几何设计与非均匀有理 B 样条》
+- 对于角度变化较大的航点，需要使用二次优化，同时优化平滑性和偏差代价
+  - 平滑性：$\sum||(2*p_k - p_{k-1} - p_{k+1})||_2^2$
+  - 偏差：$\sum ||M * q - wayPts_{ref}||_2^2$
+  - 启发式分析局部支撑航点，添加半平面约束
 
-|                    生成默认轨迹              |         调整扫掠角度 FOV=180 °               |
-|----------------------------------------------|---------------------------------------------|
-| ![](fig/path_generator_bspline_default.png)  | ![](fig/path_generator_bspline_fov_180.png) |
+|                    生成默认轨迹              |         调整扫掠角度 FOV=180 °               | BSpline 插值|  BSpline OSQP with半平面约束|
+|----------------------------------------------|---------------------------------------------|---|---|
+| ![](fig/path_generator_bspline_default.png)  | ![](fig/path_generator_bspline_fov_180.png) |![](fig/waypoints_Interpolate.png)|![](fig/waypoints_OSQP_weight_constraint.png)|
 
 #### BSplinePath Impl
 
