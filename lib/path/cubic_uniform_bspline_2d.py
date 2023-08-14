@@ -176,9 +176,10 @@ def solver_cubic_uniform_bspline_2d_v3(way_pts_2xn, vel0=[], vel1=[], acc0=[], a
     return D.T
 
 
-def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles):
+def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.1):
     import osqp
     from scipy import sparse
+    assert weight_smooth <= 1 and weight_smooth >= 0, "weight_smooth should in [0,1]"
 
     def wrap_pi(angle):
         # wrap angle to (-pi, pi]
@@ -243,7 +244,7 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles):
     lb = X - delta
     ub = X + delta
 
-    w_smooth = 0.1
+    w_smooth = weight_smooth
     w_deviation = 1-w_smooth
 
     for k in np.arange(1, n_):
@@ -464,14 +465,20 @@ def knots_quasi_uniform(ctrl_pts_num, degree=3):
 # test
 if __name__ == "__main__":
 
-    # wpt_list = np.array([
-    #     [0., 0.11672268, 0.4539905 , 0.87690559, 1.40306285, 1.92224408, 2.4859] \
-    #    ,[0., 0.48618496, 0.89100652, 1.21697847, 1.42527704, 1.59842976, 1.6793]])
-    # wpt_angle = np.array([1.5707, 1.3352, 1.0996, 0.9464, 0.79325, 0.69368, 0.59411])
-    wpt_list = np.array([[ 0, 0.5, 1, 1.5, 2, 2,   2,   2, 2]
-                         ,[0, 0,   0, 0,   0, 0.5, 1, 1.5, 2]])
-    psi = np.pi/2
-    wpt_angle = np.array([ 0, 0,   0, 0,   0, psi, psi, psi, psi])
+    test_case = 1
 
+    if test_case == 0:
 
-    ctrl_pts = solver_cubic_uniform_bspline_2d_v4(wpt_list, wpt_angle)
+        wpt_list = np.array([
+            [0., 0.11672268, 0.4539905 , 0.87690559, 1.40306285, 1.92224408, 2.4859] \
+        ,[0., 0.48618496, 0.89100652, 1.21697847, 1.42527704, 1.59842976, 1.6793]])
+        wpt_angle = np.array([1.5707, 1.3352, 1.0996, 0.9464, 0.79325, 0.69368, 0.59411])
+
+        ctrl_pts = solver_cubic_uniform_bspline_2d_v4(wpt_list, wpt_angle, 0.)
+    elif test_case == 1:
+        wpt_list = np.array([[ 0, 0.5, 1, 1.5, 2, 2,   2,   2, 2]
+                            ,[0, 0,   0, 0,   0, 0.5, 1, 1.5, 2]])
+        psi = np.pi/2
+        wpt_angle = np.array([ 0, 0,   0, 0,   0, psi, psi, psi, psi])
+
+        ctrl_pts = solver_cubic_uniform_bspline_2d_v4(wpt_list, wpt_angle)
