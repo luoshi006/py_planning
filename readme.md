@@ -40,9 +40,9 @@ A python motion planning demo
   - 偏差：$\sum ||M * q - wayPts_{ref}||_2^2$
   - 启发式分析局部支撑航点，添加半平面约束
 
-|                    生成默认轨迹              |         调整扫掠角度 FOV=180 °               | BSpline 插值|  BSpline OSQP with半平面约束|
-|----------------------------------------------|---------------------------------------------|---|---|
-| ![](fig/path_generator_bspline_default.png)  | ![](fig/path_generator_bspline_fov_180.png) |![](fig/waypoints_Interpolate.png)|![](fig/waypoints_OSQP_weight_constraint.png)|
+|                    生成默认轨迹              |         调整扫掠角度 FOV=180 °               |   BSpline OSQP 拟合 |
+|:------------------------------------------:|:------------------------------------------:|:-----:|
+| ![](fig/path_generator_bspline_default.png)  | ![](fig/path_generator_bspline_fov_180.png) |![](fig/waypoints_OSQP_weight_constraint.png)|
 
 #### BSplinePath Impl
 
