@@ -225,7 +225,7 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
     # cost_deviation
     # MB 去掉头尾各两行，计算 L2 范数
     # p_k**2 - 2*p_k*p_kref + p_kref**2
-    print(0)
+
     X = np.hstack((ctrl_pts_nx2[:,0], ctrl_pts_nx2[:,1]))   # [x0, x1,..., xn, y0, y1,..., yn]
     pt_ref = np.hstack((way_pts_2xn[0,:],way_pts_2xn[1,:]))
     c_off = n_+1
@@ -246,6 +246,7 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
 
     w_smooth = weight_smooth
     w_deviation = 1-w_smooth
+    err_range_sq = 0.1**2
 
     for k in np.arange(1, n_):
         # calc smooth
@@ -275,6 +276,13 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
 
         # calc deviation
         if k<n_-2:
+            # slack, if err too large, ignore the deviation.
+            err_sq = (X[k+1] - pt_ref[k])**2 + (X[k+1+c_off] - pt_ref[k+w_off])**2
+            if err_sq > err_range_sq:
+                w_deviation = 0.0
+            else:
+                w_deviation = 1-w_smooth
+
             # k in [1,7] -> get m1-3
             #   m1**2*p_k**2   + 2*m1*m2*p_k*p_kp1   + 2*m1*m3*p_k*p_kp2 - 2*m1*p_kref*p_k
             # + m2**2*p_kp1**2 + 2*m2*m3*p_kp1*p_kp2 - 2*m2*p_kref*p_kp1
@@ -397,6 +405,8 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
     res = problem.solve()
 
     ctrl_pts_new_nx2 = res.x.reshape(dim_,n_+1).T
+    ctrl_pts_new_nx2[:2,:] = ctrl_pts_nx2[:2,:]
+    ctrl_pts_new_nx2[-2:,:] = ctrl_pts_nx2[-2:,:]
 
     if __name__ == "__main__":
         fig,ax = plt.subplots()
