@@ -265,10 +265,10 @@ if __name__ == "__main__":
     hulls, ptss = spl1.convex_hull()
     hulls_minvo, pts_minvo = spl1.MINVO_hull()
     r = 0.1
-    vehicle_poly_nx2 = np.array([r, r
-                                , -r, r
+    vehicle_poly_nx2 = np.array([  r,  r
+                                , -r,  r
                                 , -r, -r
-                                , r, -r]).reshape((4, 2))
+                                ,  r, -r]).reshape((4, 2))
     collision_hulls = spl1.convex_hulls_of_curve(vehicle_poly_nx2)
 
     fig,ax1 = plt.subplots()
@@ -318,4 +318,3 @@ if __name__ == "__main__":
     plt.legend()
     # plt.savefig('bspline_path_collision_hull.png', dpi=600)
     plt.show()
-

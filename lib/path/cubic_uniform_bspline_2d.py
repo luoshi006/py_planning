@@ -98,6 +98,7 @@ def solver_cubic_uniform_bspline_2d_v2(way_pts, vel0=[], vel1=[]):
         show_y = spl_show_basis @ ctrl_pts_y
         ax.plot(show_x, show_y, 'g-', linewidth='1')
         plt.axis('equal')
+        # plt.savefig('test.png', dpi=300)
         plt.show()
     return D.T
 
@@ -221,6 +222,7 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
     # cost_smooth
     # sum{ ||2P_k - P_{k-1} - P_{k+1}||^2 }
     # 4*p_k**2 - 4*p_k*p_km1 - 4*p_k*p_kp1 + p_km1**2 + 2*p_km1*p_kp1 + p_kp1**2
+    # 对长度不均匀的采样点，会引起波动，参考 case 2
 
     # cost_deviation
     # MB 去掉头尾各两行，计算 L2 范数
@@ -243,12 +245,42 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
 
     lb = X - delta
     ub = X + delta
+    # ub = np.ones_like(lb)*2   # test for max value
 
     w_smooth = weight_smooth
     w_deviation = 1-w_smooth
     err_range_sq = 0.1**2
+    eps_proj = 0.5**2 * np.sin(np.deg2rad(1))
+    idx_half_constraint = []
 
     for k in np.arange(1, n_):
+        # check collinear
+        w_smooth = weight_smooth
+        if k < n_-2:
+
+            # slack, if err too large, ignore the deviation.
+            err_sq = (X[k+1] - pt_ref[k])**2 + (X[k+1+c_off] - pt_ref[k+w_off])**2
+            if err_sq > err_range_sq:
+                w_deviation = 0.0
+            else:
+                w_deviation = 1-w_smooth
+
+            # adjust smooth weight
+            p1 = np.array([pt_ref[k-1], pt_ref[k-1+w_off]])
+            p2 = np.array([pt_ref[k], pt_ref[k+w_off]])
+            p3 = np.array([pt_ref[k+1], pt_ref[k+1+w_off]])
+            v1 = p2-p1
+            v2 = p3-p2
+            proj_v12 = v1.dot(v2)
+            # 平滑代价微调
+            # if np.abs(proj_v12) < eps_proj:
+            #     w_smooth *= 0.1
+            colin_v12 = np.cross(v1, v2).item()
+            if np.abs(colin_v12) < eps_proj:
+                w_smooth *= 1
+                w_deviation *= 2
+                print("collinear: w_s {}, w_dev {}".format(w_smooth, w_deviation))
+
         # calc smooth
         P[k-1,k-1] += 1 * w_smooth
         P[k-1,k]   += -2 * w_smooth
@@ -276,12 +308,6 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
 
         # calc deviation
         if k<n_-2:
-            # slack, if err too large, ignore the deviation.
-            err_sq = (X[k+1] - pt_ref[k])**2 + (X[k+1+c_off] - pt_ref[k+w_off])**2
-            if err_sq > err_range_sq:
-                w_deviation = 0.0
-            else:
-                w_deviation = 1-w_smooth
 
             # k in [1,7] -> get m1-3
             #   m1**2*p_k**2   + 2*m1*m2*p_k*p_kp1   + 2*m1*m3*p_k*p_kp2 - 2*m1*p_kref*p_k
@@ -335,66 +361,122 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
             delta_1 = wrap_pi(angle_1 - angle_0)
             delta_2 = wrap_pi(angle_2 - angle_0)
             eps = np.deg2rad(0.5)
-            flg_constraint = False
+            flg_constraint_forward = False
+            flg_constraint_backward = False
             if abs(delta_1) > eps:
                 if delta_1 > 0 and delta_2 > 0 :
                     angle_n = angle_0 + np.pi*0.5
-                    flg_constraint = True
+                    flg_constraint_forward = True
                 elif delta_1 < 0 and delta_2 < 0 :
                     angle_n = angle_0 - np.pi*0.5
-                    flg_constraint = True
+                    flg_constraint_forward = True
             elif abs(delta_2) > eps:    # delta1 == 0, delta2 != 0
                 if delta_2 > 0:
                     angle_n = angle_0 + np.pi*0.5
-                    flg_constraint = True
+                    flg_constraint_forward = True
                 else:
                     angle_n = angle_0 - np.pi*0.5
-                    flg_constraint = True
-            if not flg_constraint:
-                # look backward
-                pt_km1 = np.array([pt_ref[k-1], pt_ref[k+w_off-1]])
-                pt_km2 = pt_km1 ## XXX
-                if 1 != k:
-                    pt_km2 = np.array([pt_ref[k-2], pt_ref[k+w_off-2]])
+                    flg_constraint_forward = True
+            # look backward
+            pt_km1 = np.array([pt_ref[k-1], pt_ref[k+w_off-1]])
+            pt_km2 = pt_km1 ## XXX
+            if 1 != k:
+                pt_km2 = np.array([pt_ref[k-2], pt_ref[k+w_off-2]])
 
-                pm1 = pt_km1 - pt_k
-                pm2 = pt_km2 - pt_k
-                angle_m1 = np.arctan2(pm1[1], pm1[0])
-                angle_m2 = np.arctan2(pm2[1], pm2[0])
+            pm1 = pt_k - pt_km1
+            pm2 = pt_k - pt_km2
+            angle_m1 = np.arctan2(pm1[1], pm1[0])
+            angle_m2 = np.arctan2(pm2[1], pm2[0])
 
-                delta_m1 = wrap_pi(angle_m1 - angle_0)
-                delta_m2 = wrap_pi(angle_m2 - angle_0)
-                if abs(delta_m1) > eps:
-                    if delta_m1 > 0 and delta_m2 > 0 :
-                        angle_n = angle_0 + np.pi*0.5
-                        flg_constraint = True
-                    elif delta_m1 < 0 and delta_m2 < 0 :
-                        angle_n = angle_0 - np.pi*0.5
-                        flg_constraint = True
-                elif abs(delta_m2) > eps:    # delta1 == 0, delta2 != 0
-                    if delta_m2 > 0:
-                        angle_n = angle_0 + np.pi*0.5
-                        flg_constraint = True
-                    else:
-                        angle_n = angle_0 - np.pi*0.5
-                        flg_constraint = True
+            delta_m1 = wrap_pi(angle_m1 - angle_0)
+            delta_m2 = wrap_pi(angle_m2 - angle_0)
+            if abs(delta_m1) > eps:
+                if delta_m1 > 0 and delta_m2 > 0 :
+                    angle_n = angle_0 - np.pi*0.5
+                    flg_constraint_backward = True
+                elif delta_m1 < 0 and delta_m2 < 0 :
+                    angle_n = angle_0 + np.pi*0.5
+                    flg_constraint_backward = True
+            elif abs(delta_m2) > eps:    # delta1 == 0, delta2 != 0
+                if delta_m2 > 0:
+                    angle_n = angle_0 - np.pi*0.5
+                    flg_constraint_backward = True
+                else:
+                    angle_n = angle_0 + np.pi*0.5
+                    flg_constraint_backward = True
 
-            if flg_constraint:
+            if flg_constraint_forward:
                 nx = np.cos(angle_n)
                 ny = np.sin(angle_n)
                 ap = np.zeros((1,(n_+1)*dim_))
-                ap[0,k] = m1 * nx
-                ap[0,k+1] = m2 * nx
-                ap[0,k+2] = m3 * nx
-                ap[0,k+c_off] = m1*ny
-                ap[0,k+c_off+1] = m2*ny
-                ap[0,k+c_off+2] = m3*ny
+                # 注掉的代码是约束曲线实际位置的，改用约束控制点
+                # ap[0,k] = m1 * nx
+                # ap[0,k+1] = m2 * nx
+                # ap[0,k+2] = m3 * nx
+                # ap[0,k+c_off] = m1*ny
+                # ap[0,k+c_off+1] = m2*ny
+                # ap[0,k+c_off+2] = m3*ny
+                ap[0,k+1] = nx
+                ap[0,k+1+c_off] = ny
                 dk = -1 * (nx*pt_k[0] + ny*pt_k[1])
                 lbp = -dk
-                ubp = -dk + 10
+                ubp = -dk + 100
                 A = np.vstack((A, ap))
                 lb = np.hstack((lb, lbp))
                 ub = np.hstack((ub, ubp))
+                idx_half_constraint.append(k)
+                # 前探，往后扩散一下
+                ap1 = np.zeros((1,(n_+1)*dim_))
+                ap1[0,k+0] = nx
+                ap1[0,k+0+c_off] = ny
+                dk = -1 * (nx*pt_km1[0] + ny*pt_km1[1])
+                lbp = -dk
+                ubp = -dk + 100
+                A = np.vstack((A, ap1))
+                lb = np.hstack((lb, lbp))
+                ub = np.hstack((ub, ubp))
+                idx_half_constraint.append(k-1)
+                print("half plane: {},({},{}), ({}, {})".format(k,pt_ref[k], pt_ref[k+w_off], nx, ny))
+                print("constraint: {} < {} < {}".format(lbp, ap@X.T, ubp))
+                # Xt = X.copy()
+                # Xr = X.copy()
+                # Xt[k] += 1
+                # Xr[k] -= 1
+                # print("test constraint dx: {}, {}".format(ap@Xt.T, ap@Xr.T))
+                # Xt[k] -= 1
+                # Xr[k] += 1
+                # Xt[k+c_off] += 1
+                # Xr[k+c_off] -= 1
+                # print("test constraint dy: {}, {}".format(ap@Xt.T, ap@Xr.T))
+                # idx_half_constraint.append(k)
+            if flg_constraint_backward:
+                nx = np.cos(angle_n)
+                ny = np.sin(angle_n)
+                ap = np.zeros((1,(n_+1)*dim_))
+
+                ap[0,k+1] = nx
+                ap[0,k+1+c_off] = ny
+                dk = -1 * (nx*pt_k[0] + ny*pt_k[1])
+                lbp = -dk
+                ubp = -dk + 100
+                A = np.vstack((A, ap))
+                lb = np.hstack((lb, lbp))
+                ub = np.hstack((ub, ubp))
+                idx_half_constraint.append(k)
+
+                # 往前扩散一下
+                ap2 = np.zeros((1,(n_+1)*dim_))
+                ap2[0,k+2] = nx
+                ap2[0,k+2+c_off] = ny
+                dk = -1 * (nx*pt_kp1[0] + ny*pt_kp1[1])
+                lbp = -dk
+                ubp = -dk + 100
+                A = np.vstack((A, ap2))
+                lb = np.hstack((lb, lbp))
+                ub = np.hstack((ub, ubp))
+                idx_half_constraint.append(k+1)
+                print("half plane: {},({},{}), ({}, {})".format(k,pt_ref[k], pt_ref[k+w_off], nx, ny))
+                print("constraint: {} < {} < {}".format(lbp, ap@X.T, ubp))
 
 
     Ps = sparse.csc_matrix(P)
@@ -419,6 +501,14 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
         ax.plot(show_pts_nx2[:,0], show_pts_nx2[:,1], 'g-', linewidth='1', label='spline Interpolate')
         show_pts_new_nx2 = spl_show_basis @ ctrl_pts_new_nx2
         ax.plot(show_pts_new_nx2[:,0], show_pts_new_nx2[:,1], 'm-', linewidth='1', label='spline OSQP half plane')
+        # constraint
+        flg_lb = True
+        for idxx in idx_half_constraint:
+            circle1 = plt.Circle((way_pts_2xn[0,idxx], way_pts_2xn[1,idxx]), 0.1, color='g', alpha=0.1)
+            if flg_lb:
+                circle1 = plt.Circle((way_pts_2xn[0,idxx], way_pts_2xn[1,idxx]), 0.1, color='g', alpha=0.1, label='half plane constraint pts')
+                flg_lb = False
+            ax.add_patch(circle1)
         plt.axis('equal')
         plt.legend()
         plt.grid()
@@ -491,4 +581,15 @@ if __name__ == "__main__":
         psi = np.pi/2
         wpt_angle = np.array([ 0, 0,   0, 0,   0, psi, psi, psi, psi])
 
+        # ctrl_pts = solver_cubic_uniform_bspline_2d_v2(wpt_list)
+        ctrl_pts = solver_cubic_uniform_bspline_2d_v4(wpt_list, wpt_angle)
+    elif test_case == 2:
+        wpt_list = np.array([[  7.52523248,   8.00700005,   8.41083938,   8.90647312,   9.46460853,
+                                9.90573155,  10.27536637,  10.73613238,  11.30161159,  11.83311605,
+                                12.24588121,  12.6636705 ],
+                            [139.59676301, 139.59987533, 139.59917138, 139.59629827, 139.59673211,
+                                139.59949598, 139.59896431, 139.59643679, 139.59589325, 139.5974165,
+                                139.59978395, 139.59833656]])
+        wpt_angle = np.array([ 0.00646011, -0.00174314, -0.00579678,  0.00077732,  0.00626543, -0.00143834,
+                            -0.00548544, -0.00096119,  0.00286591,  0.00573552, -0.00346439, -0.00346439])
         ctrl_pts = solver_cubic_uniform_bspline_2d_v4(wpt_list, wpt_angle)
