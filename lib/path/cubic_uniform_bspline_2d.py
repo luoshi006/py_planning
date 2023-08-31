@@ -353,30 +353,26 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
                 pt_kp2 = np.array([pt_ref[k+2], pt_ref[k+w_off+2]])
 
             p1 = pt_kp1 - pt_k
-            p2 = pt_kp2 - pt_k
+            p2 = pt_kp2 - pt_kp1
             angle_0 = way_angles[k]
-            angle_1 = np.arctan2(p1[1], p1[0])
-            angle_2 = np.arctan2(p2[1], p2[0])
+            theta_1 = np.arctan2(p1[1], p1[0])
+            theta_2 = np.arctan2(p2[1], p2[0])
+            if n_-3 == k:
+                theta_2 = way_angles[k+1]
 
-            delta_1 = wrap_pi(angle_1 - angle_0)
-            delta_2 = wrap_pi(angle_2 - angle_0)
-            eps = np.deg2rad(0.5)
+            delta_1 = wrap_pi(theta_1 - angle_0)
+            delta_2 = wrap_pi(theta_2 - angle_0)
+            theta_diff = wrap_pi(theta_2-theta_1)
+            delta_angle_thresh = np.deg2rad(60)
             flg_constraint_forward = False
             flg_constraint_backward = False
-            if abs(delta_1) > eps:
-                if delta_1 > 0 and delta_2 > 0 :
-                    angle_n = angle_0 + np.pi*0.5
-                    flg_constraint_forward = True
-                elif delta_1 < 0 and delta_2 < 0 :
-                    angle_n = angle_0 - np.pi*0.5
-                    flg_constraint_forward = True
-            elif abs(delta_2) > eps:    # delta1 == 0, delta2 != 0
+            if abs(theta_diff) > delta_angle_thresh and abs(delta_2) > delta_angle_thresh/2:
+                flg_constraint_forward = True
                 if delta_2 > 0:
                     angle_n = angle_0 + np.pi*0.5
-                    flg_constraint_forward = True
                 else:
                     angle_n = angle_0 - np.pi*0.5
-                    flg_constraint_forward = True
+                print("CS: theta diff: {} > {}, dir: {}".format(np.rad2deg(theta_diff), np.rad2deg(delta_angle_thresh), np.rad2deg(delta_2)))
             # look backward
             pt_km1 = np.array([pt_ref[k-1], pt_ref[k+w_off-1]])
             pt_km2 = pt_km1 ## XXX
@@ -384,26 +380,22 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
                 pt_km2 = np.array([pt_ref[k-2], pt_ref[k+w_off-2]])
 
             pm1 = pt_k - pt_km1
-            pm2 = pt_k - pt_km2
-            angle_m1 = np.arctan2(pm1[1], pm1[0])
-            angle_m2 = np.arctan2(pm2[1], pm2[0])
+            pm2 = pt_km1 - pt_km2
+            theta_m1 = np.arctan2(pm1[1], pm1[0])
+            theta_m2 = np.arctan2(pm2[1], pm2[0])
+            if 1 == k:
+                theta_m2 = way_angles[0]
 
-            delta_m1 = wrap_pi(angle_m1 - angle_0)
-            delta_m2 = wrap_pi(angle_m2 - angle_0)
-            if abs(delta_m1) > eps:
-                if delta_m1 > 0 and delta_m2 > 0 :
-                    angle_n = angle_0 - np.pi*0.5
-                    flg_constraint_backward = True
-                elif delta_m1 < 0 and delta_m2 < 0 :
-                    angle_n = angle_0 + np.pi*0.5
-                    flg_constraint_backward = True
-            elif abs(delta_m2) > eps:    # delta1 == 0, delta2 != 0
+            delta_m1 = wrap_pi(theta_m1 - angle_0)
+            delta_m2 = wrap_pi(theta_m2 - angle_0)
+            theta_diff = wrap_pi(theta_m2 - theta_m1)
+            if abs(theta_diff) > delta_angle_thresh and abs(delta_m2) > delta_angle_thresh/2:
+                flg_constraint_backward = True
                 if delta_m2 > 0:
                     angle_n = angle_0 - np.pi*0.5
-                    flg_constraint_backward = True
                 else:
                     angle_n = angle_0 + np.pi*0.5
-                    flg_constraint_backward = True
+                print("CS: theta diff: {} > {}, dir: {}".format(np.rad2deg(theta_diff), np.rad2deg(delta_angle_thresh), np.rad2deg(delta_m2)))
 
             if flg_constraint_forward:
                 nx = np.cos(angle_n)
@@ -416,6 +408,7 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
                 # ap[0,k+c_off] = m1*ny
                 # ap[0,k+c_off+1] = m2*ny
                 # ap[0,k+c_off+2] = m3*ny
+
                 ap[0,k+1] = nx
                 ap[0,k+1+c_off] = ny
                 dk = -1 * (nx*pt_k[0] + ny*pt_k[1])
@@ -425,6 +418,7 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
                 lb = np.hstack((lb, lbp))
                 ub = np.hstack((ub, ubp))
                 idx_half_constraint.append(k)
+
                 # 前探，往后扩散一下
                 ap1 = np.zeros((1,(n_+1)*dim_))
                 ap1[0,k+0] = nx
@@ -436,19 +430,9 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
                 lb = np.hstack((lb, lbp))
                 ub = np.hstack((ub, ubp))
                 idx_half_constraint.append(k-1)
-                print("half plane: {},({},{}), ({}, {})".format(k,pt_ref[k], pt_ref[k+w_off], nx, ny))
-                print("constraint: {} < {} < {}".format(lbp, ap@X.T, ubp))
-                # Xt = X.copy()
-                # Xr = X.copy()
-                # Xt[k] += 1
-                # Xr[k] -= 1
-                # print("test constraint dx: {}, {}".format(ap@Xt.T, ap@Xr.T))
-                # Xt[k] -= 1
-                # Xr[k] += 1
-                # Xt[k+c_off] += 1
-                # Xr[k+c_off] -= 1
-                # print("test constraint dy: {}, {}".format(ap@Xt.T, ap@Xr.T))
-                # idx_half_constraint.append(k)
+                print("constraint: {} < {} < {}".format(lbp, ap1@X.T, ubp))
+                print("half plane forward: {},({},{}), ({}, {})".format(k,pt_ref[k], pt_ref[k+w_off], nx, ny))
+
             if flg_constraint_backward:
                 nx = np.cos(angle_n)
                 ny = np.sin(angle_n)
@@ -475,8 +459,8 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
                 lb = np.hstack((lb, lbp))
                 ub = np.hstack((ub, ubp))
                 idx_half_constraint.append(k+1)
-                print("half plane: {},({},{}), ({}, {})".format(k,pt_ref[k], pt_ref[k+w_off], nx, ny))
-                print("constraint: {} < {} < {}".format(lbp, ap@X.T, ubp))
+                print("half plane backward: {},({},{}), ({}, {})".format(k,pt_ref[k], pt_ref[k+w_off], nx, ny))
+                print("constraint: {} < {} < {}".format(lbp, ap2@X.T, ubp))
 
 
     Ps = sparse.csc_matrix(P)
@@ -486,9 +470,11 @@ def solver_cubic_uniform_bspline_2d_v4(way_pts_2xn, way_angles, weight_smooth=0.
     problem.setup(Ps, Q, As, lb, ub)
     res = problem.solve()
 
-    ctrl_pts_new_nx2 = res.x.reshape(dim_,n_+1).T
-    ctrl_pts_new_nx2[:2,:] = ctrl_pts_nx2[:2,:]
-    ctrl_pts_new_nx2[-2:,:] = ctrl_pts_nx2[-2:,:]
+    ctrl_pts_new_nx2 = ctrl_pts_nx2
+    if res.info.status == "solved":
+        ctrl_pts_new_nx2 = res.x.reshape(dim_,n_+1).T
+        ctrl_pts_new_nx2[:2,:] = ctrl_pts_nx2[:2,:]
+        ctrl_pts_new_nx2[-2:,:] = ctrl_pts_nx2[-2:,:]
 
     if __name__ == "__main__":
         fig,ax = plt.subplots()
